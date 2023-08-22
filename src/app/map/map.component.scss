@@ -1,0 +1,12 @@
+.panel-left {
+    width: 40vw;
+    padding: 15px 2vw;
+    height: calc(100vh - 5px);
+    display: inline-block;
+}
+.map_div {
+    width: 60vw;
+    height: calc(100vh - 5px);
+    display: inline-block;
+    cursor: default;
+}

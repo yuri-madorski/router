@@ -1,0 +1,53 @@
+<p-scrollPanel class="panel-left" [style]="{'height':'95vh'}">
+    <div style="height:2px;">
+        <p-progressBar *ngIf="is_loading" mode="indeterminate" [style]="{ height: '2px' }"></p-progressBar>
+    </div>
+    <h4>Upload a dataset</h4>
+        <p-fileUpload mode="basic" chooseLabel="Uploade a dataset" name="demo[]" accept=".json"
+            (onSelect)="readJSON($event)"></p-fileUpload>
+            <h4>Set max distance and start stop</h4>
+        <p-inputNumber [(ngModel)]="max_distance" inputId="minmax" inputId="minmax" mode="decimal" suffix=" km"
+            [min]="1" [max]="100">
+        </p-inputNumber>
+        <p-inputNumber [(ngModel)]="default_speed" inputId="minmax" inputId="minmax" mode="decimal" suffix=" kmph"
+            [min]="10" [max]="100">
+        </p-inputNumber><br>
+        <p-dropdown *ngIf="terminal_stops.length>0" [options]="this.dataJSON.stops" [(ngModel)]="sel_depot"
+            optionLabel="short_description" [filter]="true" filterBy="short_description" [showClear]="true"
+            placeholder="Select a Depot" (onChange)="depotChange()">
+            <ng-template pTemplate="selectedItem">
+                <div class="flex align-items-center gap-2" *ngIf="sel_depot">
+                    <div>{{ sel_depot.short_description }}</div>
+                </div>
+            </ng-template>
+            <ng-template let-stop pTemplate="item">
+                <div class="flex align-items-center gap-2">
+                    <div>{{ stop.short_description }}</div>
+                </div>
+            </ng-template>
+        </p-dropdown>
+        <p-table [value]="terminal_stops" [scrollable]="true" scrollHeight="50vh">
+            <ng-template pTemplate="header">
+                <tr>
+                    <th>Terminal stops ({{terminal_stops.length}})</th>
+                    <th>Distance</th>
+                    <th>Time</th>
+                    <th>-</th>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-stop>
+                <tr>
+                    <td>{{ stop.short_description }}</td>
+                    <td>{{ stop.distance }}</td>
+                    <td>{{ stop.time }}</td>
+                    <td *ngIf="routes_on_map[stop.node] !== undefined">
+                        <p-button *ngIf="routes_on_map[stop.node].visible == true" icon="pi pi-eye-slash" styleClass="p-button-rounded p-button-secondary p-button-outlined" (onClick)="toggleRouteOnMap(stop.node)"></p-button>
+                        <p-button *ngIf="routes_on_map[stop.node].visible == false" icon="pi pi-eye" styleClass="p-button-rounded p-button-outlined" (onClick)="toggleRouteOnMap(stop.node)"></p-button>
+                    </td>
+                </tr>
+            </ng-template>
+        </p-table>
+    <p-toggleButton [(ngModel)]="graph_shown" onLabel="Hide graph nodes" offLabel="Show graph nodes"
+        (click)="toggleGraphNodes()"></p-toggleButton>
+</p-scrollPanel>
+<div class="map map_div" id="map"></div>
