@@ -1,6 +1,8 @@
-# Dhg
+# Routing engine
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 13.3.0.
+This project was generated with Angular CLI v.16.1.8.
+Leaflet (1.9.4) and Turf (6.5.0) libraries are used for visualization.
+PrimeNG (16.1.0) and PrimeIcons (6.0.1) is used for UI
 
 ## Development server
 
