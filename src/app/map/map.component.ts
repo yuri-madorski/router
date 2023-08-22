@@ -252,7 +252,8 @@ export class MapComponent implements OnInit {
           if (curr_route.nodes.indexOf(nn.id) === -1 && this.visited_nodes.indexOf(nn.id) === -1 && this.steps < 10000) {
             nodes_to_add.push(nn);
           }
-        }/*
+        }
+        /*
         while (nodes_to_add.length == 1) {
           curr_route.nodes.push(nodes_to_add[0].id);
           curr_route.distance += nodes_to_add[0].distance;
@@ -265,7 +266,8 @@ export class MapComponent implements OnInit {
             }
           }
           nodes_to_add = new_nodes_to_add;
-        }*/
+        }
+        */
         for (let nn of nodes_to_add) {
           let n_speed = (nn.tags['maxspeed']) ? parseInt(nn.tags['maxspeed']) : this.default_speed;
           new_queue.push({
