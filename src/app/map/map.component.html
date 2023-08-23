@@ -37,7 +37,7 @@
             </ng-template>
             <ng-template pTemplate="body" let-stop>
                 <tr>
-                    <td>{{ stop.short_description }}</td>
+                    <td>({{ stop.id }}) {{ stop.short_description }}</td>
                     <td>{{ stop.distance }}</td>
                     <td>{{ stop.time }}</td>
                     <td *ngIf="routes_on_map[stop.node] !== undefined">
