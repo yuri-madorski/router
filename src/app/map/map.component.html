@@ -3,7 +3,7 @@
         <p-progressBar *ngIf="is_loading" mode="indeterminate" [style]="{ height: '2px' }"></p-progressBar>
     </div>
     <h4>Upload a dataset</h4>
-        <p-fileUpload mode="basic" chooseLabel="Uploade a dataset" name="demo[]" accept=".json"
+        <p-fileUpload mode="basic" chooseLabel="Upload a dataset" name="demo[]" accept=".json"
             (onSelect)="readJSON($event)"></p-fileUpload>
             <h4>Set max distance and start stop</h4>
         <p-inputNumber [(ngModel)]="max_distance" inputId="minmax" inputId="minmax" mode="decimal" suffix=" km"
@@ -29,7 +29,8 @@
         <p-table [value]="terminal_stops" [scrollable]="true" scrollHeight="50vh">
             <ng-template pTemplate="header">
                 <tr>
-                    <th>Terminal stops ({{terminal_stops.length}})</th>
+                    <th>ID</th>
+                    <th>Stops ({{terminal_stops.length}})</th>
                     <th>Distance</th>
                     <th>Time</th>
                     <th>-</th>
@@ -37,7 +38,8 @@
             </ng-template>
             <ng-template pTemplate="body" let-stop>
                 <tr>
-                    <td>({{ stop.id }}) {{ stop.short_description }}</td>
+                    <td>{{ stop.id }}</td>
+                    <td>{{ stop.short_description }}</td>
                     <td>{{ stop.distance }}</td>
                     <td>{{ stop.time }}</td>
                     <td *ngIf="routes_on_map[stop.node] !== undefined">
