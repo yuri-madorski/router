@@ -20,10 +20,12 @@
     "@angular/router": "^16.1.8",
     "@turf/turf": "^6.5.0",
     "leaflet": "^1.9.4",
+    "node-xlsx": "^0.23.0",
     "primeicons": "^6.0.1",
     "primeng": "^16.1.0",
     "rxjs": "~7.8.1",
     "tslib": "^2.3.0",
+    "xlsx": "^0.19.3",
     "zone.js": "~0.13.1"
   },
   "devDependencies": {

@@ -2,6 +2,7 @@ import { HttpClient } from '@angular/common/http';
 import { Component, OnInit } from '@angular/core';
 import * as L from 'leaflet';
 import * as turf from '@turf/turf';
+import { read, utils, writeFile, writeFileXLSX } from 'xlsx';
 
 export class Node {
   id: number;
@@ -24,7 +25,25 @@ export class Route {
   distance: number;
   time: number;
 }
-
+interface DHRow { 
+  "Origin Stop Id": string;
+  "Destination Stop Id": string;
+  "Travel Time": number;
+  "Distance": number;
+  "Start Time Range": string;
+  "End Time Range": string;
+  "Generate Time": string;
+  "Route Id": string;
+  "Origin Stop Name": string;
+  "Destination Stop Name": string;
+  "Days Of Week": string;
+  "Direction": string;
+  "Purpose": string;
+  "Alignment": string;
+  "Pre-Layover Time": string;
+  "Post-Layover Time": string;
+  "updatedAt": string;
+};
 @Component({
   selector: 'app-map',
   templateUrl: './map.component.html',
@@ -40,7 +59,7 @@ export class MapComponent implements OnInit {
   public map: any;
   public overpass_query = '';
   public bbox: any = '51.59253563764556,0.053386688232421875,51.61684410110071,0.11745929718017578';
-  ngOnInit() {
+  ngOnInit(): void { (async() => {
     this.isLoading += 1;
     this.map = L.map('map', {
       center: [this.lat, this.lng],
@@ -48,7 +67,13 @@ export class MapComponent implements OnInit {
     });
     L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; Turf', }).addTo(this.map);
     //L.tileLayer('https://mt0.google.com/vt/lyrs=m@221097413,traffic&x={x}&y={y}&z={z}', { maxZoom: 19, attribution: '&copy; Turf', }).addTo(this.map);
-  }
+
+    //const f = await fetch("/assets/catalogue.xlsx");
+    //const ab = await f.arrayBuffer();
+    //const wb = read(ab);
+    //this.rows = utils.sheet_to_json<DHRow>(wb.Sheets[wb.SheetNames[0]]);
+    //console.log(this.rows);
+  })(); }
   file: any;
   file_loading = false;
   dataJSON: any;
@@ -59,6 +84,35 @@ export class MapComponent implements OnInit {
   terminal_stops_on_map: any[] = [];
   sel_depot: any;
   sel_depot_on_map: any;
+  rows:DHRow[] = [];
+  produceXLSX() {
+    this.rows = [];
+    for (let stop of this.terminal_stops) {
+      this.rows.push({
+        "Origin Stop Id": this.sel_depot.id,
+        "Destination Stop Id": stop.id,
+        "Travel Time": stop.time,
+        "Distance": stop.distance,
+        "Start Time Range": '',
+        "End Time Range": '',
+        "Generate Time": '',
+        "Route Id": '',
+        "Origin Stop Name": this.sel_depot.short_description,
+        "Destination Stop Name": stop.short_description,
+        "Days Of Week": '',
+        "Direction": '',
+        "Purpose": '',
+        "Alignment": '',
+        "Pre-Layover Time": '',
+        "Post-Layover Time": '',
+        "updatedAt": ''
+      });
+    }
+    const ws = utils.json_to_sheet(this.rows);
+    const wb = utils.book_new();
+    utils.book_append_sheet(wb, ws, "Data");
+    writeFileXLSX(wb, "DH-Catalogue.xlsx");
+  }
   readJSON(e) {
     this.is_loading = true;
     this.file_loading = true;
@@ -90,9 +144,9 @@ export class MapComponent implements OnInit {
         console.log('center', center);
         let bbox = turf.bbox(features);
         console.log('bbox', bbox);
-        let radius = turf.distance([bbox[0],bbox[1]],center);
+        let radius = turf.distance([bbox[0], bbox[1]], center);
         console.log('radius', radius);
-        bbox = turf.bbox(turf.circle(center,radius));
+        bbox = turf.bbox(turf.circle(center, radius));
         console.log('bbox', bbox);
         //this.map.setView([center.geometry.coordinates[1],center.geometry.coordinates[0]],13);
         this.map.fitBounds([[bbox[1], bbox[0]], [bbox[3], bbox[2]]]);
@@ -141,7 +195,7 @@ export class MapComponent implements OnInit {
   }
   getOSMData() {
     this.http.get('https://overpass-api.de/api/interpreter?data=[out:json][timeout:300];(way["highway"="motorway"](' + this.bbox + ');way["highway"="motorway_link"](' + this.bbox + ');way["highway"="trunk"](' + this.bbox + ');way["highway"="trunk_link"](' + this.bbox + ');way["highway"="primary"](' + this.bbox + ');way["highway"="secondary"](' + this.bbox + ');way["highway"="secondary_link"](' + this.bbox + ');way["highway"="tertiary"](' + this.bbox + ');way["highway"="residential"]["access"!="private"]["access"!="permissive"](' + this.bbox + ');way["highway"="living_street"](' + this.bbox + ');way["highway"="unclassified"](' + this.bbox + ');way["highway"="service"](' + this.bbox + ');way["highway"="service"]["bus"](' + this.bbox + '););out;>;out skel qt;').subscribe((data: any) => {
-    //this.http.get('https://overpass-api.de/api/interpreter?data=[out:json][timeout:300];(way["highway"="motorway"](' + this.bbox + ');way["highway"="motorway_link"](' + this.bbox + ');way["highway"="trunk"](' + this.bbox + ');way["highway"="trunk_link"](' + this.bbox + ');way["highway"="primary"](' + this.bbox + ');way["highway"="secondary"](' + this.bbox + ');way["highway"="secondary_link"](' + this.bbox + ');way["highway"="tertiary"](' + this.bbox + ');way["highway"="residential"]["access"!="private"]["access"!="permissive"](' + this.bbox + ');way["highway"="living_street"](' + this.bbox + ');way["highway"="unclassified"](' + this.bbox + ');way["highway"="service"]["bus"](' + this.bbox + '););out;>;out skel qt;').subscribe((data: any) => {
+      //this.http.get('https://overpass-api.de/api/interpreter?data=[out:json][timeout:300];(way["highway"="motorway"](' + this.bbox + ');way["highway"="motorway_link"](' + this.bbox + ');way["highway"="trunk"](' + this.bbox + ');way["highway"="trunk_link"](' + this.bbox + ');way["highway"="primary"](' + this.bbox + ');way["highway"="secondary"](' + this.bbox + ');way["highway"="secondary_link"](' + this.bbox + ');way["highway"="tertiary"](' + this.bbox + ');way["highway"="residential"]["access"!="private"]["access"!="permissive"](' + this.bbox + ');way["highway"="living_street"](' + this.bbox + ');way["highway"="unclassified"](' + this.bbox + ');way["highway"="service"]["bus"](' + this.bbox + '););out;>;out skel qt;').subscribe((data: any) => {
       console.log(data);
       for (let el of data.elements) {
         if (el.type == 'node') {
