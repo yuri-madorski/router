@@ -25,7 +25,7 @@ export class Route {
   distance: number;
   time: number;
 }
-interface DHRow { 
+interface DHRow {
   "Origin Stop Id": string;
   "Destination Stop Id": string;
   "Travel Time": number;
@@ -59,21 +59,23 @@ export class MapComponent implements OnInit {
   public map: any;
   public overpass_query = '';
   public bbox: any = '51.59253563764556,0.053386688232421875,51.61684410110071,0.11745929718017578';
-  ngOnInit(): void { (async() => {
-    this.isLoading += 1;
-    this.map = L.map('map', {
-      center: [this.lat, this.lng],
-      zoom: 8,
-    });
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; Turf', }).addTo(this.map);
-    //L.tileLayer('https://mt0.google.com/vt/lyrs=m@221097413,traffic&x={x}&y={y}&z={z}', { maxZoom: 19, attribution: '&copy; Turf', }).addTo(this.map);
+  ngOnInit(): void {
+    (async () => {
+      this.isLoading += 1;
+      this.map = L.map('map', {
+        center: [this.lat, this.lng],
+        zoom: 8,
+      });
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; Turf', }).addTo(this.map);
+      //L.tileLayer('https://mt0.google.com/vt/lyrs=m@221097413,traffic&x={x}&y={y}&z={z}', { maxZoom: 19, attribution: '&copy; Turf', }).addTo(this.map);
 
-    //const f = await fetch("/assets/catalogue.xlsx");
-    //const ab = await f.arrayBuffer();
-    //const wb = read(ab);
-    //this.rows = utils.sheet_to_json<DHRow>(wb.Sheets[wb.SheetNames[0]]);
-    //console.log(this.rows);
-  })(); }
+      //const f = await fetch("/assets/catalogue.xlsx");
+      //const ab = await f.arrayBuffer();
+      //const wb = read(ab);
+      //this.rows = utils.sheet_to_json<DHRow>(wb.Sheets[wb.SheetNames[0]]);
+      //console.log(this.rows);
+    })();
+  }
   file: any;
   file_loading = false;
   dataJSON: any;
@@ -84,7 +86,7 @@ export class MapComponent implements OnInit {
   terminal_stops_on_map: any[] = [];
   sel_depot: any;
   sel_depot_on_map: any;
-  rows:DHRow[] = [];
+  rows: DHRow[] = [];
   produceXLSX() {
     this.rows = [];
     for (let stop of this.terminal_stops) {
@@ -235,7 +237,24 @@ export class MapComponent implements OnInit {
         this.terminal_stops_nodes.push(ts_node);
       }
       console.log('terminal_stops_nodes', this.terminal_stops_nodes);
-      this.is_loading = false;
+      let aws_nodes = [];
+      for (let node of this.nodes) {
+        aws_nodes.push({
+          id: node.id,
+          lat: node.lat,
+          lon: node.lon,
+          next_nodes: node.next_nodes,
+        })
+      }
+      //console.log('nodes_index', JSON.stringify(this.nodes_index));
+      //this.http.post('https://6igj3zibqanqrt76fn6smiarhq0sopnv.lambda-url.eu-west-2.on.aws/',{graph_name:this.file.name,content:this.nodes},{responseType:'text'}).subscribe(data=>{
+      this.http.post('https://6igj3zibqanqrt76fn6smiarhq0sopnv.lambda-url.eu-west-2.on.aws/', { graph_name: this.file.name }).subscribe((data: any) => {
+        console.log(data);
+        this.http.put(data.return_url, JSON.stringify(aws_nodes), { responseType: 'text' }).subscribe(data1 => {
+          console.log(data1);
+          this.is_loading = false;
+        });
+      });
     });
   }
   showWaysFromPoint(node_id) {
@@ -346,6 +365,16 @@ export class MapComponent implements OnInit {
     }
   }
   findRoutes(from_node: number) {
+    let params = {
+      graph_name: this.file.name,
+      from_node: from_node,
+      max_distance: this.max_distance,
+      default_speed: this.default_speed,
+      terminal_stops_nodes: this.terminal_stops_nodes
+    }
+    this.http.post('https://nm44b4ozspeslefujndie6uf4q0tzdyg.lambda-url.eu-west-2.on.aws/', params).subscribe((data: any) => {
+      console.log('aws ', data);
+    });
     console.log(from_node);
     let new_queue: Route[] = [];
     for (let nn of this.nodes_index[from_node].next_nodes) {
@@ -359,72 +388,6 @@ export class MapComponent implements OnInit {
       });
       this.addNodeToRoute(new_queue);
     }
-    /*
-    for (let nn of this.nodes_index[from_node].next_nodes) {
-      this.routes.push([from_node, nn.id]);
-      this.last_iter_added += 1;
-    }
-    let iter = 0;
-    console.log('iter' + iter + ' ', this.routes);
-    while (this.terminal_nodes_routes.length < this.terminal_stops_nodes.length && this.last_iter_added > 0) {
-      this.last_iter_added = 0;
-      for (let route of this.routes) {
-        let last_node = route[route.length - 1];
-        if (this.visited_nodes.indexOf(last_node) === -1) {
-          let i = 0;
-          let initial_route = JSON.parse(JSON.stringify(route));
-          let last_n = this.nodes_index[last_node];
-          if (last_n !== undefined)
-            for (let nn of last_n.next_nodes) {
-              if (route.indexOf(nn.id) === -1) {
-                if (i == 0) {
-                  route.push(nn.id);
-                  this.last_iter_added += 1;
-                } else {
-                  this.routes.push([...initial_route, nn.id]);
-                  this.last_iter_added += 1;
-                }
-                i += 1;
-              }
-            }
-          this.visited_nodes.push(last_node);
-          last_n.on_map.setStyle({ color: '#7a7' });
-          //console.log('visited_nodes', this.visited_nodes);
-          //L.circle([last_n.lat, last_n.lon], { radius: 1, opacity: .5, color: '#7a7' }).addTo(this.map);
-        }
-      }
-      iter += 1;
-      //console.log('iter' + iter, this.routes.length);
-      for (let route of this.routes) {
-        for (let tsn of this.terminal_stops_nodes) {
-          if (tsn == route[route.length - 1]) {
-            let tnr = this.terminal_nodes_routes.find(tnr => tnr.terminal_node == tsn);
-            if (tnr === undefined) {
-              let distance = this.pairwise(route).map(el => this.nodes_index[el[0]].next_nodes.find(nn => nn.id == el[1]).distance).reduce((acc, cv) => { return acc + cv }, 0);
-              this.terminal_nodes_routes.push({
-                terminal_node: tsn,
-                route: route,
-                distance: distance,
-                time: 60 * distance / 40
-              });
-            } else {
-              let distance = this.pairwise(route).map(el => this.nodes_index[el[0]].next_nodes.find(nn => nn.id == el[1]).distance).reduce((acc, cv) => { return acc + cv }, 0);
-              if (distance < tnr.distance) {
-                tnr = {
-                  terminal_node: tsn,
-                  route: route,
-                  distance: distance,
-                  time: 60 * distance / 40
-                };
-              }
-            }
-          }
-        }
-      }
-      if (iter > 750) break;
-    }
-    this.displayRoutesOnMap();
-    */
   }
   displayRoutesOnMap() {
     for (let route of this.final_routes) {
