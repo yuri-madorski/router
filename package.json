@@ -19,6 +19,8 @@
     "@angular/platform-browser-dynamic": "^16.1.8",
     "@angular/router": "^16.1.8",
     "@turf/turf": "^6.5.0",
+    "jszip": "^3.10.1",
+    "jszip-utils": "^0.1.0",
     "leaflet": "^1.9.4",
     "node-xlsx": "^0.23.0",
     "primeicons": "^6.0.1",

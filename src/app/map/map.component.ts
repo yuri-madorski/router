@@ -2,6 +2,8 @@ import { HttpClient } from '@angular/common/http';
 import { Component, OnInit } from '@angular/core';
 import * as L from 'leaflet';
 import * as turf from '@turf/turf';
+import * as JSZip from 'jszip';
+import JSZipUtils from 'jszip-utils';
 import { read, utils, writeFile, writeFileXLSX } from 'xlsx';
 
 export class Node {
@@ -195,6 +197,7 @@ export class MapComponent implements OnInit {
       }
     }
   }
+  graph_name = '';
   getOSMData() {
     this.http.get('https://overpass-api.de/api/interpreter?data=[out:json][timeout:300];(way["highway"="motorway"](' + this.bbox + ');way["highway"="motorway_link"](' + this.bbox + ');way["highway"="trunk"](' + this.bbox + ');way["highway"="trunk_link"](' + this.bbox + ');way["highway"="primary"](' + this.bbox + ');way["highway"="secondary"](' + this.bbox + ');way["highway"="secondary_link"](' + this.bbox + ');way["highway"="tertiary"](' + this.bbox + ');way["highway"="residential"]["access"!="private"]["access"!="permissive"](' + this.bbox + ');way["highway"="living_street"](' + this.bbox + ');way["highway"="unclassified"](' + this.bbox + ');way["highway"="service"](' + this.bbox + ');way["highway"="service"]["bus"](' + this.bbox + '););out;>;out skel qt;').subscribe((data: any) => {
       //this.http.get('https://overpass-api.de/api/interpreter?data=[out:json][timeout:300];(way["highway"="motorway"](' + this.bbox + ');way["highway"="motorway_link"](' + this.bbox + ');way["highway"="trunk"](' + this.bbox + ');way["highway"="trunk_link"](' + this.bbox + ');way["highway"="primary"](' + this.bbox + ');way["highway"="secondary"](' + this.bbox + ');way["highway"="secondary_link"](' + this.bbox + ');way["highway"="tertiary"](' + this.bbox + ');way["highway"="residential"]["access"!="private"]["access"!="permissive"](' + this.bbox + ');way["highway"="living_street"](' + this.bbox + ');way["highway"="unclassified"](' + this.bbox + ');way["highway"="service"]["bus"](' + this.bbox + '););out;>;out skel qt;').subscribe((data: any) => {
@@ -247,12 +250,20 @@ export class MapComponent implements OnInit {
         })
       }
       //console.log('nodes_index', JSON.stringify(this.nodes_index));
+      let graph_name_file = String(new Date().valueOf()) + '_' + this.file.name;
+      this.graph_name = graph_name_file + '.zip';
       //this.http.post('https://6igj3zibqanqrt76fn6smiarhq0sopnv.lambda-url.eu-west-2.on.aws/',{graph_name:this.file.name,content:this.nodes},{responseType:'text'}).subscribe(data=>{
-      this.http.post('https://6igj3zibqanqrt76fn6smiarhq0sopnv.lambda-url.eu-west-2.on.aws/', { graph_name: this.file.name }).subscribe((data: any) => {
+      this.http.post('https://6igj3zibqanqrt76fn6smiarhq0sopnv.lambda-url.eu-west-2.on.aws/', { graph_name: this.graph_name }).subscribe((data: any) => {
         console.log(data);
-        this.http.put(data.return_url, JSON.stringify(aws_nodes), { responseType: 'text' }).subscribe(data1 => {
-          console.log(data1);
-          this.is_loading = false;
+        console.log(graph_name_file);
+        let zf = new JSZip();
+        zf.file(graph_name_file, JSON.stringify(aws_nodes));
+        zf.generateAsync({type:'blob', compression:'DEFLATE', compressionOptions:{level:9}}).then((blob)=> {
+          console.log(blob);
+          this.http.put(data.return_url, blob, { responseType: 'text' }).subscribe(data1 => {
+            console.log(data1);
+            this.is_loading = false;
+          });
         });
       });
     });
@@ -366,16 +377,20 @@ export class MapComponent implements OnInit {
   }
   findRoutes(from_node: number) {
     let params = {
-      graph_name: this.file.name,
+      graph_name: this.graph_name,
       from_node: from_node,
       max_distance: this.max_distance,
       default_speed: this.default_speed,
       terminal_stops_nodes: this.terminal_stops_nodes
     }
-    this.http.post('https://nm44b4ozspeslefujndie6uf4q0tzdyg.lambda-url.eu-west-2.on.aws/', params).subscribe((data: any) => {
-      console.log('aws ', data);
-    });
-    console.log(from_node);
+    console.log('params', params);
+    //this.http.post('https://nm44b4ozspeslefujndie6uf4q0tzdyg.lambda-url.eu-west-2.on.aws/?'+String(new Date().valueOf()), params).subscribe((data: any) => {
+    //  console.log('AWS thinks that final_routes are ', data);
+    //  this.final_routes = data;
+    //  this.displayRoutesOnMap();
+    //});
+
+    /*console.log(from_node);
     let new_queue: Route[] = [];
     for (let nn of this.nodes_index[from_node].next_nodes) {
       this.min_dist_to_nodes[nn.id] = nn.distance;
@@ -387,22 +402,25 @@ export class MapComponent implements OnInit {
         time: (nn.distance / n_speed) * 60
       });
       this.addNodeToRoute(new_queue);
-    }
+    }*/
   }
   displayRoutesOnMap() {
     for (let route of this.final_routes) {
-      route.distance = Math.round(route.distance * 1000) / 1000;
-      route.time = Math.ceil(route.time);
-      console.log(route);
-      if (this.routes_on_map[route.nodes[route.nodes.length - 1]] === undefined) {
-        this.routes_on_map[route.nodes[route.nodes.length - 1]] = {
-          visible: false,
-          shape: L.polyline(route.nodes.map(el => [this.nodes_index[el].lat, this.nodes_index[el].lon]))
+      if (this.nodes_index[route.nodes[0]] !== undefined) {
+        route.distance = Math.round(route.distance * 1000) / 1000;
+        route.time = Math.ceil(route.time);
+        //console.log(route);
+        if (this.routes_on_map[route.nodes[route.nodes.length - 1]] === undefined) {
+          this.routes_on_map[route.nodes[route.nodes.length - 1]] = {
+            visible: false,
+            shape: L.polyline(route.nodes.map(el => [this.nodes_index[el].lat, this.nodes_index[el].lon]))
+          }
         }
+        this.terminal_stops.filter(el => el.node == route.nodes[route.nodes.length - 1]).forEach(el => { el['distance'] = route.distance; });
+        this.terminal_stops.filter(el => el.node == route.nodes[route.nodes.length - 1]).forEach(el => { el['time'] = route.time; });
       }
-      this.terminal_stops.filter(el => el.node == route.nodes[route.nodes.length - 1]).forEach(el => { el['distance'] = route.distance; });
-      this.terminal_stops.filter(el => el.node == route.nodes[route.nodes.length - 1]).forEach(el => { el['time'] = route.time; });
     }
+    this.is_loading = false;
     /*
     for (let tnr of this.terminal_nodes_routes) {
       console.log(tnr);
