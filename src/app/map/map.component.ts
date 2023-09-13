@@ -390,7 +390,7 @@ export class MapComponent implements OnInit {
     //  this.displayRoutesOnMap();
     //});
 
-    /*console.log(from_node);
+    console.log(from_node);
     let new_queue: Route[] = [];
     for (let nn of this.nodes_index[from_node].next_nodes) {
       this.min_dist_to_nodes[nn.id] = nn.distance;
@@ -402,7 +402,7 @@ export class MapComponent implements OnInit {
         time: (nn.distance / n_speed) * 60
       });
       this.addNodeToRoute(new_queue);
-    }*/
+    }
   }
   displayRoutesOnMap() {
     for (let route of this.final_routes) {
