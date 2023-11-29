@@ -16,6 +16,7 @@ export class Node {
     tags: any;
   }[]
   on_map: any;
+  params?: any;
 }
 export class Way {
   id: number;
@@ -26,6 +27,7 @@ export class Route {
   nodes: number[];
   distance: number;
   time: number;
+  time_to_end: number;
 }
 interface DHRow {
   "Origin Stop Id": string;
@@ -55,7 +57,7 @@ export class MapComponent implements OnInit {
   constructor(
     private http: HttpClient
   ) { }
-  public isLoading = 0;
+  public is_loading = 0;
   public lat = 52;
   public lng = 0;
   public map: any;
@@ -63,7 +65,7 @@ export class MapComponent implements OnInit {
   public bbox: any = '51.59253563764556,0.053386688232421875,51.61684410110071,0.11745929718017578';
   ngOnInit(): void {
     (async () => {
-      this.isLoading += 1;
+      //this.is_loading += 1;
       this.map = L.map('map', {
         center: [this.lat, this.lng],
         zoom: 8,
@@ -88,21 +90,31 @@ export class MapComponent implements OnInit {
   terminal_stops_on_map: any[] = [];
   sel_depot: any;
   sel_depot_on_map: any;
+  desired_routes: {
+    start_node?: number;
+    start_stop: any;
+    end_node?: number;
+    end_stop: any;
+    distance: number;
+    time: number;
+    on_map?: any;
+    nodes?: any;
+  }[] = [];
   rows: DHRow[] = [];
   produceXLSX() {
     this.rows = [];
-    for (let stop of this.terminal_stops) {
+    for (let dr of this.desired_routes) {
       this.rows.push({
-        "Origin Stop Id": this.sel_depot.id,
-        "Destination Stop Id": stop.id,
-        "Travel Time": stop.time,
-        "Distance": stop.distance,
+        "Origin Stop Id": dr.start_stop.id,
+        "Destination Stop Id": dr.end_stop.id,
+        "Travel Time": dr.time,
+        "Distance": dr.distance,
         "Start Time Range": '',
         "End Time Range": '',
         "Generate Time": '',
         "Route Id": '',
-        "Origin Stop Name": this.sel_depot.short_description,
-        "Destination Stop Name": stop.short_description,
+        "Origin Stop Name": dr.start_stop.short_description,
+        "Destination Stop Name": dr.end_stop.short_description,
         "Days Of Week": '',
         "Direction": '',
         "Purpose": '',
@@ -118,7 +130,7 @@ export class MapComponent implements OnInit {
     writeFileXLSX(wb, "DH-Catalogue.xlsx");
   }
   readJSON(e) {
-    this.is_loading = true;
+    this.is_loading += 1;
     this.file_loading = true;
     console.log(e);
 
@@ -131,6 +143,7 @@ export class MapComponent implements OnInit {
         this.dataJSON = JSON.parse(this.dataJSON);
         console.log('json', this.dataJSON);
         this.dataJSON.stops.sort((a, b) => (a.short_description < b.short_description) ? -1 : 1);
+        this.depots = this.dataJSON.stops.filter(el => this.depot_stop_ids.indexOf(el.id) !== -1);
         for (let route of this.dataJSON.routes) {
           let stop = this.dataJSON.stops.find(el => el.id == route.trace_points[0].point);
           if (stop !== undefined && this.terminal_stops.indexOf(stop) == -1)
@@ -142,6 +155,22 @@ export class MapComponent implements OnInit {
         console.log('terminal_stops', this.terminal_stops);
         for (let ts of this.terminal_stops) {
           this.terminal_stops_on_map.push(L.circle([ts.lat, ts.long]).addTo(this.map));
+          for (let depot of this.depots) {
+            if (depot.id !== ts.id) {
+              this.desired_routes.push({
+                start_stop: depot,
+                end_stop: ts,
+                distance: Math.round(turf.distance([depot.long, depot.lat], [ts.long, ts.lat]) * 1000) / 1000,
+                time: null
+              });
+              this.desired_routes.push({
+                start_stop: ts,
+                end_stop: depot,
+                distance: Math.round(turf.distance([depot.long, depot.lat], [ts.long, ts.lat]) * 1000) / 1000,
+                time: null
+              });
+            }
+          }
         }
         let features = turf.points(this.terminal_stops.map(el => [parseFloat(el.long), parseFloat(el.lat)]));
         let center = turf.center(features);
@@ -162,21 +191,44 @@ export class MapComponent implements OnInit {
     if (this.file) reader.readAsText(this.file);
     this.file_loading = false;
   }
+  prefsJSON;
+  depot_stop_ids = [];
+  depots;
+  readPreferencesJSON(e) {
+    this.is_loading += 1;
+    this.file_loading = true;
+    console.log(e);
 
-  depotChange() {
+    this.file = e.currentFiles[0];
+    const reader = new FileReader();
+    reader.addEventListener(
+      'load',
+      () => {
+        this.prefsJSON = reader.result;
+        this.prefsJSON = JSON.parse(this.prefsJSON);
+        this.depot_stop_ids = this.prefsJSON.find(el => el.depots !== undefined).depots.items.map(el => el.stop_id);
+        console.log('depot_stop_ids', this.depot_stop_ids);
+        this.is_loading -= 1;
+      },
+      false
+    );
+    if (this.file) reader.readAsText(this.file);
+    this.file_loading = false;
+  }
+  /*depotChange() {
     this.is_loading = true;
     if (this.sel_depot_on_map) this.sel_depot_on_map.remove();
     this.sel_depot_on_map = L.circle([this.sel_depot.lat, this.sel_depot.long], { color: '#a00' }).addTo(this.map);
     let closest_node = this.findClosest(this.sel_depot.lat, this.sel_depot.long);
     console.log(this.sel_depot.lat, this.sel_depot.long);
     if (closest_node !== undefined) {
-      this.findRoutes(closest_node);
+      //this.findRoutes(closest_node);
     } else {
       alert('Check depot coordinates in the timeplan');
       this.is_loading = false;
     }
-  }
-  nodes: Node[] = [];
+  }*/
+  //nodes: Node[] = [];
   ways: Way[] = [];
 
   pairwise(arr: number[]): number[][] {
@@ -189,7 +241,8 @@ export class MapComponent implements OnInit {
   nodes_index: Node[] = [];
   graph_shown = false;
   toggleGraphNodes() {
-    for (let node of this.nodes) {
+    for (let node_id in this.nodes_index) {
+      let node = this.nodes_index[node_id];
       if (this.graph_shown) {
         node.on_map.addTo(this.map);
       } else {
@@ -207,10 +260,41 @@ export class MapComponent implements OnInit {
           let on_map = L.circle([el.lat, el.lon], { radius: 1, opacity: .5, color: '#a77' })
             .on('click', e => { this.showWaysFromPoint(el.id) });
           this.nodes_index[el.id] = { id: el.id, lat: el.lat, lon: el.lon, next_nodes: [], on_map: on_map };
-          this.nodes.push(this.nodes_index[el.id]);
+          //this.nodes.push(this.nodes_index[el.id]);
         }
       }
-      console.log('nodes created', this.nodes);
+      console.log('nodes created');
+      for (let node_id in this.nodes_index) {
+        let node = this.nodes_index[node_id];
+        for (let ts of this.terminal_stops) {
+          if (ts['node_distance'] == undefined) ts['node_distance'] = 100;
+          //let dist = turf.distance([ts.lon, ts.lat], [node.lon, node.lat], { units: 'meters' });
+          let dist = Math.sqrt(Math.pow(ts.long * 100 - node.lon * 100, 2) + Math.pow(ts.lat * 100 - node.lat * 100, 2));
+          if (dist < ts['node_distance']) {
+            ts['node_distance'] = dist;
+            ts['node'] = node.id;
+          }
+        }
+        for (let ts of this.depots) {
+          if (ts['node_distance'] == undefined) ts['node_distance'] = 100;
+          //let dist = turf.distance([ts.lon, ts.lat], [node.lon, node.lat], { units: 'meters' });
+          let dist = Math.sqrt(Math.pow(ts.long * 100 - node.lon * 100, 2) + Math.pow(ts.lat * 100 - node.lat * 100, 2));
+          if (dist < ts['node_distance']) {
+            ts['node_distance'] = dist;
+            ts['node'] = node.id;
+          }
+        }
+      }
+      for (let ts of this.terminal_stops) {
+        //let ts_node = this.findClosest(ts.lat, ts.long);
+        //ts['node'] = ts_node;
+        this.terminal_stops_nodes.push(ts['node']);
+      }
+      console.log('terminal_stops_nodes', this.terminal_stops_nodes);
+      for (let dr of this.desired_routes) {
+        dr.start_node = (this.depots.map(el => el.id).indexOf(dr.start_stop.id) !== -1) ? this.depots.find(el => el.id == dr.start_stop.id).node : this.terminal_stops.find(el => el.id == dr.start_stop.id).node;
+        dr.end_node = (this.depots.map(el => el.id).indexOf(dr.end_stop.id) !== -1) ? this.depots.find(el => el.id == dr.end_stop.id).node : this.terminal_stops.find(el => el.id == dr.end_stop.id).node;
+      }
       for (let el of data.elements) {
         if (el.type == 'way') {
           this.ways.push({ id: el.id, nodes: el.nodes, tags: el.tags });
@@ -225,23 +309,21 @@ export class MapComponent implements OnInit {
           }
         }
       }
-      console.log('ways', this.ways);
-      console.log('next nodes filled', this.nodes);
-      for (let n0 of this.nodes) {
+      //console.log('ways', this.ways);
+      console.log('next nodes filled');
+      for (let n0_id in this.nodes_index) {
+        let n0 = this.nodes_index[n0_id];
         for (let nn of n0.next_nodes) {
           let n1 = this.nodes_index[nn.id];
           nn.distance = turf.distance([n0.lon, n0.lat], [n1.lon, n1.lat]);
         }
       }
-      console.log('distances calculated', this.nodes);
-      for (let ts of this.terminal_stops) {
-        let ts_node = this.findClosest(ts.lat, ts.long);
-        ts['node'] = ts_node;
-        this.terminal_stops_nodes.push(ts_node);
-      }
-      console.log('terminal_stops_nodes', this.terminal_stops_nodes);
+      console.log('distances calculated');
+      console.log('nodes_index', this.nodes_index);
+      this.ready_state = true;
       let aws_nodes = [];
-      for (let node of this.nodes) {
+      for (let node_id in this.nodes_index) {
+        let node = this.nodes_index[node_id];
         aws_nodes.push({
           id: node.id,
           lat: node.lat,
@@ -252,8 +334,9 @@ export class MapComponent implements OnInit {
       //console.log('nodes_index', JSON.stringify(this.nodes_index));
       let graph_name_file = String(new Date().valueOf()) + '_' + this.file.name;
       this.graph_name = graph_name_file + '.zip';
+      this.is_loading -= 1;
       //this.http.post('https://6igj3zibqanqrt76fn6smiarhq0sopnv.lambda-url.eu-west-2.on.aws/',{graph_name:this.file.name,content:this.nodes},{responseType:'text'}).subscribe(data=>{
-      this.http.post('https://6igj3zibqanqrt76fn6smiarhq0sopnv.lambda-url.eu-west-2.on.aws/', { graph_name: this.graph_name }).subscribe((data: any) => {
+      /*this.http.post('https://6igj3zibqanqrt76fn6smiarhq0sopnv.lambda-url.eu-west-2.on.aws/', { graph_name: this.graph_name }).subscribe((data: any) => {
         console.log(data);
         console.log(graph_name_file);
         let zf = new JSZip();
@@ -262,23 +345,23 @@ export class MapComponent implements OnInit {
           console.log(blob);
           this.http.put(data.return_url, blob, { responseType: 'text' }).subscribe(data1 => {
             console.log(data1);
-            this.is_loading = false;
           });
         });
-      });
+      });*/
     });
   }
   showWaysFromPoint(node_id) {
-    let n0 = this.nodes.find(el => el.id == node_id);
+    let n0 = this.nodes_index[node_id];
     for (let nn of n0.next_nodes) {
-      let n1 = this.nodes.find(n => n.id == nn.id);
+      let n1 = this.nodes_index[nn.id];
       L.polyline([[n0.lat, n0.lon], [n1.lat, n1.lon]]).addTo(this.map);
     }
   }
   findClosest(lat: number, lon: number): number {
     let closest_node: number;
     let min_distance = 1000000;
-    for (let node of this.nodes) {
+    for (let node_id in this.nodes_index) {
+      let node = this.nodes_index[node_id];
       let dist = turf.distance([lon, lat], [node.lon, node.lat], { units: 'meters' });
       if (dist < min_distance) {
         min_distance = dist;
@@ -296,7 +379,6 @@ export class MapComponent implements OnInit {
     time: number;
     route: number[];
   }[] = [];
-  is_loading = false;
   default_speed = 40;
   min_time_to_nodes: number[] = [];
   min_dist_to_nodes: number[] = [];
@@ -304,94 +386,23 @@ export class MapComponent implements OnInit {
   final_routes: Route[] = [];
   routes_on_map: { visible: boolean, shape: any }[] = [];
   steps = 0;
-  addNodeToRoute(routes_queue: Route[]) {
-    this.steps += 1;
-    if (this.steps % 1000 == 0) console.log(this.steps, routes_queue.length);
-    let new_queue: Route[] = [];
-    for (let curr_route of routes_queue) {
-      let last_node_id = curr_route.nodes[curr_route.nodes.length - 1];
-      this.visited_nodes.push(last_node_id);
-      this.nodes_index[last_node_id].on_map.setStyle({ color: '#7a7' });
-      let go_on = true;
-      if (this.min_dist_to_nodes[last_node_id] === undefined) {
-        this.min_dist_to_nodes[last_node_id] = curr_route.distance;
-      } else {
-        if (this.min_dist_to_nodes[last_node_id] < curr_route.distance)
-          go_on = false;
+  ready_state = false;
+  idr = 0;
+  runForAll() {
+    this.idr =0;
+    for (let dr of this.desired_routes) {
+      if (dr.distance < this.max_distance) {
+        this.idr += 1;
+        this.routeA(dr.start_node, dr.end_node);
+        console.log(dr.distance, this.max_distance, this.idr, 'routeA => ', dr.start_node, dr.end_node);
       }
-      if (curr_route.distance > this.max_distance) go_on = false;
-      if (this.terminal_stops_nodes.indexOf(curr_route.nodes[curr_route.nodes.length - 1]) !== -1) {
-        let already_found = this.final_routes.find(el => el.nodes[el.nodes.length - 1] == curr_route.nodes[curr_route.nodes.length - 1]);
-        if (already_found !== undefined) {
-          if (already_found.time > curr_route.time) {
-            already_found = curr_route;
-            console.log('already_found updated', curr_route);
-          } else {
-            console.log('curr_route too long');
-          }
-        } else {
-          this.final_routes.push(curr_route);
-          console.log('route added', curr_route);
-        }
-      }
-      if (go_on && this.final_routes.length < this.terminal_stops_nodes.length && this.nodes_index[last_node_id] !== undefined) {
-        let last_node = this.nodes_index[last_node_id];
-        let nodes_to_add: Node['next_nodes'] = [];
-        for (let nn of last_node.next_nodes) {
-          if (curr_route.nodes.indexOf(nn.id) === -1 && this.visited_nodes.indexOf(nn.id) === -1 && this.steps < 10000) {
-            nodes_to_add.push(nn);
-          }
-        }
-        /*
-        while (nodes_to_add.length == 1) {
-          curr_route.nodes.push(nodes_to_add[0].id);
-          curr_route.distance += nodes_to_add[0].distance;
-          curr_route.time += (nodes_to_add[0].distance / 40) * 60;
-          last_node = this.nodes_index[nodes_to_add[0].id];
-          let new_nodes_to_add: Node['next_nodes'] = [];
-          for (let nn of last_node.next_nodes) {
-            if (curr_route.nodes.indexOf(nn.id) === -1 && this.visited_nodes.indexOf(nn.id) === -1 && this.steps < 10000) {
-              new_nodes_to_add.push(nn);
-            }
-          }
-          nodes_to_add = new_nodes_to_add;
-        }
-        */
-        for (let nn of nodes_to_add) {
-          let n_speed = (nn.tags['maxspeed']) ? parseInt(nn.tags['maxspeed']) : this.default_speed;
-          new_queue.push({
-            nodes: [...curr_route.nodes, nn.id],
-            distance: curr_route.distance + nn.distance,
-            time: curr_route.time + (nn.distance / n_speed) * 60
-          });
-        }
-      }
-    }
-    if (new_queue.length > 0) {
-      this.addNodeToRoute(new_queue);
-    } else {
-      console.log('done');
-      this.is_loading = false;
-      this.displayRoutesOnMap();
     }
   }
-  findRoutes(from_node: number) {
-    let params = {
-      graph_name: this.graph_name,
-      from_node: from_node,
-      max_distance: this.max_distance,
-      default_speed: this.default_speed,
-      terminal_stops_nodes: this.terminal_stops_nodes
-    }
-    console.log('params', params);
-    //this.http.post('https://nm44b4ozspeslefujndie6uf4q0tzdyg.lambda-url.eu-west-2.on.aws/?'+String(new Date().valueOf()), params).subscribe((data: any) => {
-    //  console.log('AWS thinks that final_routes are ', data);
-    //  this.final_routes = data;
-    //  this.displayRoutesOnMap();
-    //});
-
-    console.log(from_node);
+  routeA(from_node, to_node) {
+    console.log(' => routeA', from_node, to_node);
+    this.is_loading += 1;
     let new_queue: Route[] = [];
+    let found = false;
     for (let nn of this.nodes_index[from_node].next_nodes) {
       this.min_dist_to_nodes[nn.id] = nn.distance;
       this.min_time_to_nodes[nn.id] = (nn.distance / 40) * 60;
@@ -399,44 +410,51 @@ export class MapComponent implements OnInit {
       new_queue.push({
         nodes: [from_node, nn.id],
         distance: nn.distance,
-        time: (nn.distance / n_speed) * 60
+        time: (nn.distance / n_speed) * 60,
+        time_to_end: turf.distance([this.nodes_index[nn.id].lon, this.nodes_index[nn.id].lat], [this.nodes_index[to_node].lon, this.nodes_index[to_node].lat]) / 40 * 60
+        //time_to_end: Math.sqrt(Math.pow(this.nodes_index[nn.id].lon * 100 - this.nodes_index[to_node].lon * 100, 2) + Math.pow(this.nodes_index[nn.id].lat * 100 - this.nodes_index[to_node].lat * 100, 2))
       });
-      this.addNodeToRoute(new_queue);
+      new_queue.sort((a, b) => { return (a.time + a.time_to_end > b.time + b.time_to_end) ? 1 : -1 });
+      //console.log(new_queue);
     }
-  }
-  displayRoutesOnMap() {
-    for (let route of this.final_routes) {
-      if (this.nodes_index[route.nodes[0]] !== undefined) {
-        route.distance = Math.round(route.distance * 1000) / 1000;
-        route.time = Math.ceil(route.time);
-        //console.log(route);
-        if (this.routes_on_map[route.nodes[route.nodes.length - 1]] === undefined) {
-          this.routes_on_map[route.nodes[route.nodes.length - 1]] = {
-            visible: false,
-            shape: L.polyline(route.nodes.map(el => [this.nodes_index[el].lat, this.nodes_index[el].lon]))
-          }
-        }
-        this.terminal_stops.filter(el => el.node == route.nodes[route.nodes.length - 1]).forEach(el => { el['distance'] = route.distance; });
-        this.terminal_stops.filter(el => el.node == route.nodes[route.nodes.length - 1]).forEach(el => { el['time'] = route.time; });
+    let steps = 0;
+    while (!found && steps < 10000 && new_queue[0].distance < this.max_distance) {
+      steps += 1;
+      let queue0 = new_queue[0];
+      for (let nn of this.nodes_index[queue0.nodes[queue0.nodes.length - 1]].next_nodes) {
+        this.min_dist_to_nodes[nn.id] = nn.distance;
+        this.min_time_to_nodes[nn.id] = (nn.distance / 40) * 60;
+        let n_speed = (nn.tags['maxspeed']) ? parseInt(nn.tags['maxspeed']) : this.default_speed;
+        if (queue0.nodes.indexOf(nn.id) === -1)
+          new_queue.push({
+            nodes: [...queue0.nodes, nn.id],
+            distance: queue0.distance + nn.distance,
+            time: queue0.time + (nn.distance / n_speed) * 60,
+            //time_to_end: turf.distance([this.nodes_index[nn.id].lon, this.nodes_index[nn.id].lat], [this.nodes_index[to_node].lon, this.nodes_index[to_node].lat]) * 60
+            time_to_end: 10*Math.sqrt(Math.pow(this.nodes_index[nn.id].lon * 100 - this.nodes_index[to_node].lon * 100, 2) + Math.pow(this.nodes_index[nn.id].lat * 100 - this.nodes_index[to_node].lat * 100, 2))
+          });
       }
+      new_queue.splice(0, 1);
+      new_queue.sort((a, b) => { return (a.time + a.time_to_end > b.time + b.time_to_end) ? 1 : -1 });
+      if (new_queue[0].nodes[new_queue[0].nodes.length - 1] == to_node) {
+        found = true;
+        this.desired_routes.find(el => el.start_node == from_node && el.end_node == to_node).distance = Math.round(new_queue[0].distance * 1000) / 1000;
+        this.desired_routes.find(el => el.start_node == from_node && el.end_node == to_node).time = Math.round(new_queue[0].time);
+        this.desired_routes.find(el => el.start_node == from_node && el.end_node == to_node).nodes = new_queue[0].nodes;
+        console.log(' => found', from_node, to_node, new_queue[0]);
+      }
+      //if (steps % 100 == 0) console.log(steps, new_queue[0]);
     }
-    this.is_loading = false;
-    /*
-    for (let tnr of this.terminal_nodes_routes) {
-      console.log(tnr);
-      L.polyline(tnr.route.map(el => [this.nodes.find(n => n.id == el).lat, this.nodes.find(n => n.id == el).lon]))
-        .bindTooltip(Math.round(tnr.distance * 1000) / 1000 + 'km, ' + Math.round(tnr.time) + 'min')
-        .on('mouseover', (e) => { e.target.setStyle({ color: 'red' }); })
-        .on('mouseout', (e) => { e.target.setStyle({ color: 'blue' }); })
-        .addTo(this.map);
-    }*/
+    //new_queue = undefined;
+    this.is_loading -= 1;
   }
-  toggleRouteOnMap(node) {
-    this.routes_on_map[node].visible = !this.routes_on_map[node].visible;
-    if (this.routes_on_map[node].visible === true) {
-      this.routes_on_map[node].shape.addTo(this.map);
+  toggleRouteOnMap(desired_route) {
+    if (desired_route.on_map === undefined) {
+      desired_route.on_map = L.polyline(desired_route.nodes.map(el => [this.nodes_index[el].lat, this.nodes_index[el].lon])).addTo(this.map);
     } else {
-      this.routes_on_map[node].shape.remove();
+      desired_route.on_map.remove();
+      desired_route.on_map = undefined;
     }
+
   }
 }
