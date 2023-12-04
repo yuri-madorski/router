@@ -41,7 +41,7 @@
             </tr>
         </ng-template>
         <ng-template pTemplate="body" let-desired_route>
-            <tr>
+            <tr *ngIf="desired_route.distance <= max_distance">
                 <td>{{ desired_route.start_stop.id }}<br>{{ desired_route.start_stop.short_description }}</td>
                 <td>{{ desired_route.end_stop.id }}<br>{{ desired_route.end_stop.short_description }}</td>
                 <td>{{ desired_route.distance }}</td>
@@ -49,7 +49,7 @@
                 <td>
                     <p-button *ngIf="ready_state" icon="pi pi-bolt"
                         styleClass="p-button-rounded p-button-secondary p-button-outlined"
-                        (onClick)="routeA(desired_route.start_node,desired_route.end_node)"></p-button>
+                        (onClick)="routeA(desired_route, desired_route.start_node,desired_route.end_node, desired_route.distance)"></p-button>
                     <p-button *ngIf="desired_route.nodes && desired_route.nodes.length>0" [icon]="(desired_route.on_map === undefined)?'pi pi-eye':'pi pi-eye-slash'"
                         styleClass="p-button-rounded p-button-outlined"
                         (onClick)="toggleRouteOnMap(desired_route)"></p-button>
