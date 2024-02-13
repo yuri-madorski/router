@@ -9,6 +9,7 @@ import { AppComponent } from './app.component';
 import { MapComponent } from './map/map.component';
 
 import { ButtonModule } from 'primeng/button';
+import { CheckboxModule } from 'primeng/checkbox';
 import { DropdownModule } from 'primeng/dropdown';
 import { FieldsetModule } from 'primeng/fieldset';
 import { FileUploadModule } from 'primeng/fileupload';
@@ -31,6 +32,7 @@ import { ToggleButtonModule } from 'primeng/togglebutton';
     AppRoutingModule,
 
     ButtonModule,
+    CheckboxModule,
     DropdownModule,
     FieldsetModule,
     FileUploadModule,

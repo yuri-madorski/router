@@ -2,64 +2,78 @@
     <div style="height:2px;">
         <p-progressBar *ngIf="is_loading>0" mode="indeterminate" [style]="{ height: '2px' }"></p-progressBar>
     </div>
-    <p-fileUpload mode="basic" chooseLabel="Upload preferences" name="" accept=".json" [style]="{'display':'inline-block'}"
-        (onSelect)="readPreferencesJSON($event)"></p-fileUpload><br>
-    <p-fileUpload *ngIf="depot_stop_ids.length>0" mode="basic" chooseLabel="Upload a dataset" name="" accept=".json" [style]="{'display':'inline-block'}"
-        (onSelect)="readJSON($event)"></p-fileUpload>
-    <h4>2. Set max distance and default speed and start stop</h4>
-    <p-inputNumber [(ngModel)]="max_distance" inputId="minmax" inputId="minmax" mode="decimal" suffix=" km" [min]="1"
-        [max]="100">
-    </p-inputNumber>
-    <p-inputNumber [(ngModel)]="default_speed" inputId="minmax" inputId="minmax" mode="decimal" suffix=" kmph"
-        [min]="10" [max]="100">
-    </p-inputNumber>
-    <p-button *ngIf="ready_state" label="Find all" icon="pi pi-bolt"
-        (onClick)="runForAll()"></p-button>
-    <!--<h4 *ngIf="terminal_stops.length>0">3. Select start stop</h4>
-    <p-dropdown *ngIf="terminal_stops.length>0" [options]="this.depots" [(ngModel)]="sel_depot"
-        optionLabel="short_description" [filter]="true" filterBy="short_description" [showClear]="true"
-        placeholder="Select a Depot" (onChange)="depotChange()">
-        <ng-template pTemplate="selectedItem">
-            <div class="flex align-items-center gap-2" *ngIf="sel_depot">
-                <div>{{ sel_depot.short_description }}</div>
-            </div>
-        </ng-template>
-        <ng-template let-stop pTemplate="item">
-            <div class="flex align-items-center gap-2">
-                <div>{{ stop.short_description }}</div>
-            </div>
-        </ng-template>
-    </p-dropdown>-->
-    <p-table *ngIf="terminal_stops.length>0" [value]="desired_routes" [scrollable]="true" scrollHeight="50vh">
-        <ng-template pTemplate="header">
-            <tr>
-                <th>Start Stop</th>
-                <th>End Stop</th>
-                <th>Distance</th>
-                <th>Time</th>
-                <th>({{desired_routes.length}})</th>
-            </tr>
-        </ng-template>
-        <ng-template pTemplate="body" let-desired_route>
-            <tr *ngIf="desired_route.distance <= max_distance">
-                <td>{{ desired_route.start_stop.id }}<br>{{ desired_route.start_stop.short_description }}</td>
-                <td>{{ desired_route.end_stop.id }}<br>{{ desired_route.end_stop.short_description }}</td>
-                <td>{{ desired_route.distance }}</td>
-                <td>{{ desired_route.time }}</td>
-                <td>
-                    <p-button *ngIf="ready_state" icon="pi pi-bolt"
-                        styleClass="p-button-rounded p-button-secondary p-button-outlined"
-                        (onClick)="routeA(desired_route, desired_route.start_node,desired_route.end_node, desired_route.distance)"></p-button>
-                    <p-button *ngIf="desired_route.nodes && desired_route.nodes.length>0" [icon]="(desired_route.on_map === undefined)?'pi pi-eye':'pi pi-eye-slash'"
-                        styleClass="p-button-rounded p-button-outlined"
-                        (onClick)="toggleRouteOnMap(desired_route)"></p-button>
-                </td>
-            </tr>
-        </ng-template>
-    </p-table>
-    <p-toggleButton *ngIf="ready_state && terminal_stops.length>0" [(ngModel)]="graph_shown" onLabel="Hide graph nodes"
-        offLabel="Show graph nodes" (click)="toggleGraphNodes()"></p-toggleButton>
-    <p-button *ngIf="ready_state" label="Get catalogue" icon="pi pi-download"
-        (onClick)="produceXLSX()"></p-button>
+    <div>
+        <h4>1. Select preferences and dataset files from Scheduling export</h4>
+        <div style="display:inline-block; width:45%; vertical-align: top;">
+            <p-fileUpload mode="basic" chooseLabel="Upload preferences" name="" accept=".json"
+                [style]="{'display':'inline-block'}" styleClass="p-button-rounded" (onSelect)="readPreferencesJSON($event)"></p-fileUpload><br>
+        </div>
+        <div style="display:inline-block; width:45%; vertical-align: top;">
+            <p-fileUpload *ngIf="depot_stop_ids.length>0" mode="basic" chooseLabel="Upload a dataset" name=""
+                accept=".json" [style]="{'display':'inline-block'}" styleClass="p-button-rounded" (onSelect)="readJSON($event)"></p-fileUpload>
+        </div>
+    </div>
+    <div *ngIf="ready_state">
+        <h4>2. Set max distance and default speed and start stop</h4>
+        <p-inputNumber [(ngModel)]="max_distance" inputId="minmax" inputId="minmax" mode="decimal" suffix=" km"
+            [min]="1" [max]="100" [style]="{'margin-right':'1vw'}">
+        </p-inputNumber>
+        <p-inputNumber [(ngModel)]="default_speed" inputId="minmax" inputId="minmax" mode="decimal" suffix=" kmph"
+            [min]="10" [max]="100" [style]="{'margin-right':'1vw'}">
+        </p-inputNumber>
+        <p-inputNumber [(ngModel)]="pull_closest_count" inputId="minmax" inputId="minmax" mode="decimal" suffix=" closest pulls"
+            [min]="1" [max]="100" [style]="{'margin-right':'1vw'}">
+        </p-inputNumber>
+        <div style="display: inline-block;" [style]="{'margin-right':'1vw'}">
+            <p-checkbox label="Include deadheads" [(ngModel)]="include_deadheads" [binary]="true" inputId="binary"></p-checkbox>
+        </div>
+        <!--<p-button label="Find all" icon="pi pi-bolt" styleClass="p-button-rounded p-button-success" (onClick)="runForAll()"></p-button>-->
+        <p-button label="Find all" icon="pi pi-bolt" styleClass="p-button-rounded p-button-success" (onClick)="findWays()"></p-button>
+        <div style="height:2px; margin-top:1vh">
+            <p-progressBar [value]="100*calc_done/total_to_calc" [showValue]="false" [style]="{ height: '2px' }"></p-progressBar>
+        </div>
+        <p-table *ngIf="terminal_stops.length>0" [value]="desired_routes" [scrollable]="true" scrollHeight="50vh">
+            <ng-template pTemplate="header">
+                <tr>
+                    <th></th>
+                    <th>Start Stop</th>
+                    <th>End Stop</th>
+                    <th>Distance</th>
+                    <th>Time</th>
+                    <th>({{desired_routes.length}})</th>
+                </tr>
+            </ng-template>
+            <ng-template pTemplate="body" let-desired_route>
+                <tr *ngIf="desired_route.distance <= max_distance && (desired_route.is_deadhead === false || (desired_route.is_deadhead && include_deadheads)) && (desired_route.is_deadhead === true || (desired_route.pull_closest_index <= pull_closest_count))">
+                    <td>
+                        <p-button *ngIf="desired_route"
+                            [icon]="(desired_route.on_map === undefined)?'pi pi-eye':'pi pi-eye-slash'"
+                            styleClass="p-button-rounded p-button-outlined"
+                            (onClick)="toggleAerialOnMap(desired_route)"></p-button>
+                    </td>
+                    <td>{{ desired_route.start_stop.id }}<br>{{ desired_route.start_node }}<br>{{ desired_route.start_stop.short_description }}</td>
+                    <td>{{ desired_route.end_stop.id }}<br>{{ desired_route.end_node }}<br>{{ desired_route.end_stop.short_description }}</td>
+                    <td>{{ desired_route.distance }}</td>
+                    <td>{{ desired_route.time }}</td>
+                    <td>
+                        <p-button icon="pi pi-bolt"
+                            styleClass="p-button-rounded p-button-secondary p-button-outlined"
+                            (onClick)="findWayBetween(desired_route, desired_route.start_node,desired_route.end_node)"></p-button>
+                            <!--<p-button icon="pi pi-add"
+                            styleClass="p-button-rounded p-button-secondary p-button-outlined"
+                            (onClick)="routeA(desired_route, desired_route.start_node,desired_route.end_node, desired_route.distance)"></p-button>-->
+                        <p-button *ngIf="desired_route.nodes && desired_route.nodes.length>0"
+                            [icon]="(desired_route.on_map === undefined)?'pi pi-eye':'pi pi-eye-slash'"
+                            styleClass="p-button-rounded p-button-outlined"
+                            (onClick)="toggleRouteOnMap(desired_route)"></p-button>
+                    </td>
+                </tr>
+            </ng-template>
+        </p-table>
+        <p-toggleButton [disabled]="true" *ngIf="calc_done>total_to_calc" [(ngModel)]="graph_shown"
+            onLabel="Hide graph nodes" offLabel="Show graph nodes" (click)="toggleGraphNodes()"></p-toggleButton>
+        <p-button [disabled]="is_loading>0" styleClass="p-button-rounded p-button-success" label="Get catalogue" icon="pi pi-download" (onClick)="produceXLSX()"></p-button>
+    </div>
+
 </p-scrollPanel>
 <div class="map map_div" id="map"></div>
