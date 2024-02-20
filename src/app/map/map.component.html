@@ -6,11 +6,13 @@
         <h4>1. Select preferences and dataset files from Scheduling export</h4>
         <div style="display:inline-block; width:45%; vertical-align: top;">
             <p-fileUpload mode="basic" chooseLabel="Upload preferences" name="" accept=".json"
-                [style]="{'display':'inline-block'}" styleClass="p-button-rounded" (onSelect)="readPreferencesJSON($event)"></p-fileUpload><br>
+                [style]="{'display':'inline-block'}" styleClass="p-button-rounded"
+                (onSelect)="readPreferencesJSON($event)"></p-fileUpload><br>
         </div>
         <div style="display:inline-block; width:45%; vertical-align: top;">
             <p-fileUpload *ngIf="depot_stop_ids.length>0" mode="basic" chooseLabel="Upload a dataset" name=""
-                accept=".json" [style]="{'display':'inline-block'}" styleClass="p-button-rounded" (onSelect)="readJSON($event)"></p-fileUpload>
+                accept=".json" [style]="{'display':'inline-block'}" styleClass="p-button-rounded"
+                (onSelect)="readJSON($event)"></p-fileUpload>
         </div>
     </div>
     <div *ngIf="ready_state">
@@ -21,16 +23,19 @@
         <p-inputNumber [(ngModel)]="default_speed" inputId="minmax" inputId="minmax" mode="decimal" suffix=" kmph"
             [min]="10" [max]="100" [style]="{'margin-right':'1vw'}">
         </p-inputNumber>
-        <p-inputNumber [(ngModel)]="pull_closest_count" inputId="minmax" inputId="minmax" mode="decimal" suffix=" closest pulls"
-            [min]="1" [max]="100" [style]="{'margin-right':'1vw'}">
+        <p-inputNumber [(ngModel)]="pull_closest_count" inputId="minmax" inputId="minmax" mode="decimal"
+            suffix=" closest pulls" [min]="1" [max]="100" [style]="{'margin-right':'1vw'}">
         </p-inputNumber>
         <div style="display: inline-block;" [style]="{'margin-right':'1vw'}">
-            <p-checkbox label="Include deadheads" [(ngModel)]="include_deadheads" [binary]="true" inputId="binary"></p-checkbox>
+            <p-checkbox label="Include deadheads" [(ngModel)]="include_deadheads" [binary]="true"
+                inputId="binary"></p-checkbox>
         </div>
         <!--<p-button label="Find all" icon="pi pi-bolt" styleClass="p-button-rounded p-button-success" (onClick)="runForAll()"></p-button>-->
-        <p-button label="Find all" icon="pi pi-bolt" styleClass="p-button-rounded p-button-success" (onClick)="findWays()"></p-button>
+        <p-button label="Find all" icon="pi pi-bolt" styleClass="p-button-rounded p-button-success"
+            (onClick)="findWays()"></p-button>
         <div style="height:2px; margin-top:1vh">
-            <p-progressBar [value]="100*calc_done/total_to_calc" [showValue]="false" [style]="{ height: '2px' }"></p-progressBar>
+            <p-progressBar [value]="100*calc_done/total_to_calc" [showValue]="false"
+                [style]="{ height: '2px' }"></p-progressBar>
         </div>
         <p-table *ngIf="terminal_stops.length>0" [value]="desired_routes" [scrollable]="true" scrollHeight="50vh">
             <ng-template pTemplate="header">
@@ -44,22 +49,24 @@
                 </tr>
             </ng-template>
             <ng-template pTemplate="body" let-desired_route>
-                <tr *ngIf="desired_route.distance <= max_distance && (desired_route.is_deadhead === false || (desired_route.is_deadhead && include_deadheads)) && (desired_route.is_deadhead === true || (desired_route.pull_closest_index <= pull_closest_count))">
+                <tr
+                    *ngIf="desired_route.distance <= max_distance && (desired_route.is_deadhead === false || (desired_route.is_deadhead && include_deadheads)) && (desired_route.is_deadhead === true || (desired_route.pull_closest_index <= pull_closest_count))">
                     <td>
                         <p-button *ngIf="desired_route"
                             [icon]="(desired_route.on_map === undefined)?'pi pi-eye':'pi pi-eye-slash'"
                             styleClass="p-button-rounded p-button-outlined"
                             (onClick)="toggleAerialOnMap(desired_route)"></p-button>
                     </td>
-                    <td>{{ desired_route.start_stop.id }}<br>{{ desired_route.start_node }}<br>{{ desired_route.start_stop.short_description }}</td>
-                    <td>{{ desired_route.end_stop.id }}<br>{{ desired_route.end_node }}<br>{{ desired_route.end_stop.short_description }}</td>
+                    <td>{{ desired_route.start_stop.id }}<br>{{ desired_route.start_node }}<br>{{
+                        desired_route.start_stop.short_description }}</td>
+                    <td>{{ desired_route.end_stop.id }}<br>{{ desired_route.end_node }}<br>{{
+                        desired_route.end_stop.short_description }}</td>
                     <td>{{ desired_route.distance }}</td>
                     <td>{{ desired_route.time }}</td>
                     <td>
-                        <p-button icon="pi pi-bolt"
-                            styleClass="p-button-rounded p-button-secondary p-button-outlined"
-                            (onClick)="findWayBetween(desired_route, desired_route.start_node,desired_route.end_node)"></p-button>
-                            <!--<p-button icon="pi pi-add"
+                        <p-button icon="pi pi-bolt" styleClass="p-button-rounded p-button-secondary p-button-outlined"
+                            (onClick)="log_calcs = true; findWayBetween(desired_route, desired_route.start_node,desired_route.end_node)"></p-button>
+                        <!--<p-button icon="pi pi-add"
                             styleClass="p-button-rounded p-button-secondary p-button-outlined"
                             (onClick)="routeA(desired_route, desired_route.start_node,desired_route.end_node, desired_route.distance)"></p-button>-->
                         <p-button *ngIf="desired_route.nodes && desired_route.nodes.length>0"
@@ -70,9 +77,12 @@
                 </tr>
             </ng-template>
         </p-table>
-        <p-toggleButton [disabled]="true" *ngIf="calc_done>total_to_calc" [(ngModel)]="graph_shown"
-            onLabel="Hide graph nodes" offLabel="Show graph nodes" (click)="toggleGraphNodes()"></p-toggleButton>
-        <p-button [disabled]="is_loading>0" styleClass="p-button-rounded p-button-success" label="Get catalogue" icon="pi pi-download" (onClick)="produceXLSX()"></p-button>
+        <!--<p-toggleButton [disabled]="true" *ngIf="calc_done>total_to_calc" [(ngModel)]="graph_shown"
+            onLabel="Hide graph nodes" offLabel="Show graph nodes" (click)="toggleGraphNodes()"></p-toggleButton>-->
+        <p-toggleButton [(ngModel)]="all_on_map" styleClass="p-button-rounded p-button-info" onLabel="Hide all shapes"
+            offLabel="Show all shapes" (click)="toggleAllRouteOnMap()"></p-toggleButton>
+        <p-button [disabled]="is_loading>0" styleClass="p-button-rounded p-button-success" label="Get catalogue"
+            icon="pi pi-download" (onClick)="produceXLSX()"></p-button>
     </div>
 
 </p-scrollPanel>

@@ -160,57 +160,60 @@ export class MapComponent implements OnInit {
           this.depots_stops_on_map.push(L.circle([ts.lat, ts.long], { color: 'red' }).bindTooltip(ts.id).addTo(this.map));
         }
         console.log('depots_stops_on_map', this.depots_stops_on_map);
+        let dr_index = [];
         for (let ts of this.terminal_stops) {
           this.terminal_stops_on_map.push(L.circle([ts.lat, ts.long]).bindTooltip(ts.id).addTo(this.map));
           for (let depot of this.depots) {
-            if (depot.id !== ts.id) {
+            if (depot.id == ts.id) continue;
+            this.desired_routes.push({
+              start_stop: depot,
+              end_stop: ts,
+              distance: Math.round(turf.distance([depot.long, depot.lat], [ts.long, ts.lat]) * 1000) / 1000,
+              time: null,
+              is_deadhead: false,
+              pull_closest_index: 0
+            });
+            dr_index.push(depot.id + '-' + ts.id);
+            this.desired_routes.push({
+              start_stop: ts,
+              end_stop: depot,
+              distance: Math.round(turf.distance([depot.long, depot.lat], [ts.long, ts.lat]) * 1000) / 1000,
+              time: null,
+              is_deadhead: false,
+              pull_closest_index: 0
+            });
+            dr_index.push(ts.id + '-' + depot.id);
+          }
+          for (let ts1 of this.terminal_stops) {
+            if (ts1.id == ts.id) continue;
+
+            //if (this.desired_routes.find(el => el.start_stop == ts1 && el.end_stop == ts) === undefined) {
+            //console.log(ts1.id + '-' + ts.id, dr_index.indexOf(ts1.id + '-' + ts.id))
+            if (dr_index.indexOf(ts1.id + '-' + ts.id) === -1) {
               this.desired_routes.push({
-                start_stop: depot,
+                start_stop: ts1,
                 end_stop: ts,
-                distance: Math.round(turf.distance([depot.long, depot.lat], [ts.long, ts.lat]) * 1000) / 1000,
+                distance: Math.round(turf.distance([ts1.long, ts1.lat], [ts.long, ts.lat]) * 1000) / 1000,
                 time: null,
-                is_deadhead: false,
-                pull_closest_index: 0
+                is_deadhead: true
               });
+              dr_index.push(ts1.id + '-' + ts.id);
+            }
+            //if (this.desired_routes.find(el => el.start_stop == ts && el.end_stop == ts1) === undefined) {
+            //console.log(ts.id + '-' + ts1.id, dr_index.indexOf(ts.id + '-' + ts1.id))
+            if (dr_index.indexOf(ts.id + '-' + ts1.id) === -1) {
               this.desired_routes.push({
                 start_stop: ts,
-                end_stop: depot,
-                distance: Math.round(turf.distance([depot.long, depot.lat], [ts.long, ts.lat]) * 1000) / 1000,
+                end_stop: ts1,
+                distance: Math.round(turf.distance([ts1.long, ts1.lat], [ts.long, ts.lat]) * 1000) / 1000,
                 time: null,
-                is_deadhead: false,
-                pull_closest_index: 0
+                is_deadhead: true
               });
+              dr_index.push(ts.id + '-' + ts1.id);
             }
           }
-          let dr_index = [];
-          for (let ts1 of this.terminal_stops) {
-            if (ts1.id !== ts.id) {
-              //if (this.desired_routes.find(el => el.start_stop == ts1 && el.end_stop == ts) === undefined) {
-              if (dr_index.indexOf(ts1 + '-' + ts) === -1) {
-                this.desired_routes.push({
-                  start_stop: ts1,
-                  end_stop: ts,
-                  distance: Math.round(turf.distance([ts1.long, ts1.lat], [ts.long, ts.lat]) * 1000) / 1000,
-                  time: null,
-                  is_deadhead: true
-                });
-                dr_index.push(ts1 + '-' + ts);
-              }
-              //if (this.desired_routes.find(el => el.start_stop == ts && el.end_stop == ts1) === undefined) {
-              if (dr_index.indexOf(ts + '-' + ts1) === -1) {
-                this.desired_routes.push({
-                  start_stop: ts,
-                  end_stop: ts1,
-                  distance: Math.round(turf.distance([ts1.long, ts1.lat], [ts.long, ts.lat]) * 1000) / 1000,
-                  time: null,
-                  is_deadhead: true
-                });
-                dr_index.push(ts1 + '-' + ts);
-              }
-            }
-          }
-          console.log('desired_routes', this.desired_routes.length);
         }
+        console.log('desired_routes', this.desired_routes.length);
         for (let ts of this.terminal_stops) {
           let pull_outs = this.desired_routes.filter(el => el.end_stop == ts && el.is_deadhead == false);
           pull_outs.sort((a, b) => { return (a.distance > b.distance) ? 1 : -1; });
@@ -230,7 +233,7 @@ export class MapComponent implements OnInit {
           }
         }
         this.desired_routes.sort((a, b) => { return (a.distance > b.distance) ? 1 : -1; });
-        console.log('desired_routes', this.desired_routes);
+        console.log('desired_routes', this.desired_routes.map(el => [el.start_stop.id, el.end_stop.id]));
         let features = turf.points(this.terminal_stops.map(el => [parseFloat(el.long), parseFloat(el.lat)]), this.depots.map(el => [parseFloat(el.long), parseFloat(el.lat)]));
         let center = turf.center(features);
         console.log('center', center);
@@ -296,7 +299,7 @@ export class MapComponent implements OnInit {
   }
   graph_name = '';
   graph = createGraph();
-  graph_links: { distance: number, time: number }[] = [];
+  graph_links = {};
   getOSMData() {
     this.http.get('https://overpass-api.de/api/interpreter?data=[out:json][timeout:300];(' +
       'way["highway"="motorway"](' + this.bbox + ');' +
@@ -366,6 +369,7 @@ export class MapComponent implements OnInit {
           dr.start_node = (this.depots.map(el => el.id).indexOf(dr.start_stop.id) !== -1) ? this.depots.find(el => el.id == dr.start_stop.id).node : this.terminal_stops.find(el => el.id == dr.start_stop.id).node;
           dr.end_node = (this.depots.map(el => el.id).indexOf(dr.end_stop.id) !== -1) ? this.depots.find(el => el.id == dr.end_stop.id).node : this.terminal_stops.find(el => el.id == dr.end_stop.id).node;
         }
+        //let other_dirs = {};
         for (let el of data.elements) {
           if (el.type == 'way') {
             //this.ways.push({ id: el.id, nodes: el.nodes, tags: el.tags });
@@ -383,12 +387,14 @@ export class MapComponent implements OnInit {
               if (el.tags['oneway'] == 'yes' && el.tags['oneway:psv'] !== 'no' && el.tags['oneway:bus'] !== 'no') other_dir = false;
               if (other_dir) {
                 this.graph.addLink(pair[1] * 1, pair[0] * 1, { distance: distance, time: time });
-                this.graph_links[(pair[1] * 1) + '_' + (pair[0] * 1)] = { distance: distance, time: time };
                 //  this.nodes_index[pair[1]].next_nodes.push({ id: pair[0], distance: distance, tags: el.tags, path: [] });
               }
+              this.graph_links[(pair[1] * 1) + '_' + (pair[0] * 1)] = { distance: distance, time: time };
+              //other_dirs[(pair[1] * 1) + '_' + (pair[0] * 1)] = {od:other_dir,tags:el.tags};
             }
           }
         }
+        //console.log('other_dirs => ', other_dirs);
         console.log('graph_links => ', this.graph_links);
         console.log('ready');
         this.ready_state = true;
@@ -441,6 +447,7 @@ export class MapComponent implements OnInit {
       }
     }
   }
+  log_calcs = false;
   async findWayBetween(desired_route, node1: number, node2: number) {
     let pathFinder = createPath.aGreedy(this.graph, {
       oriented: true,
@@ -458,7 +465,9 @@ export class MapComponent implements OnInit {
         desired_route.distance += turf.distance([this.nodes_index[np[0]].lon, this.nodes_index[np[0]].lat], [this.nodes_index[np[1]].lon, this.nodes_index[np[1]].lat]);
         let glink = this.graph_links[np[0] + '_' + np[1]];
         if (glink) desired_route.time += glink.time;
+        if (this.log_calcs) console.log(np[0] + '_' + np[1], glink);
       }
+    this.log_calcs = false;
   }
   visited_nodes: number[] = [];
   last_iter_added: number = 0;
@@ -486,6 +495,24 @@ export class MapComponent implements OnInit {
     } else {
       desired_route.on_map.remove();
       desired_route.on_map = undefined;
+    }
+  }
+  all_on_map = false;
+  toggleAllRouteOnMap() {
+    //this.all_on_map = !this.all_on_map;
+    for (let desired_route of this.desired_routes) {
+      if (this.all_on_map) {
+        if (desired_route.on_map !== undefined) {
+          desired_route.on_map.remove();
+          desired_route.on_map = undefined;
+        }
+        if (desired_route.nodes) desired_route.on_map = L.polyline(desired_route.nodes.map(el => [this.nodes_index[el].lat, this.nodes_index[el].lon])).addTo(this.map);
+      } else {
+        if (desired_route.on_map !== undefined) {
+          desired_route.on_map.remove();
+          desired_route.on_map = undefined;
+        }
+      }
     }
   }
   toggleAerialOnMap(desired_route) {
