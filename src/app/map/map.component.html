@@ -3,41 +3,75 @@
         <p-progressBar *ngIf="is_loading>0" mode="indeterminate" [style]="{ height: '2px' }"></p-progressBar>
     </div>
     <div>
-        <h4>1. Select preferences and dataset files from Scheduling export</h4>
-        <div style="display:inline-block; width:45%; vertical-align: top;">
-            <p-fileUpload mode="basic" chooseLabel="Upload preferences" name="" accept=".json"
-                [style]="{'display':'inline-block'}" styleClass="p-button-rounded"
-                (onSelect)="readPreferencesJSON($event)"></p-fileUpload><br>
-        </div>
-        <div style="display:inline-block; width:45%; vertical-align: top;">
-            <p-fileUpload *ngIf="depot_stop_ids.length>0" mode="basic" chooseLabel="Upload a dataset" name=""
-                accept=".json" [style]="{'display':'inline-block'}" styleClass="p-button-rounded"
-                (onSelect)="readJSON($event)"></p-fileUpload>
-        </div>
+        <p-tabView>
+            <p-tabPanel header="Upload via Optibus API">
+                <div style="display: inline-block; vertical-align: bottom;">Link to the schedule<br>
+                    <input type="text" pInputText [(ngModel)]="schedule_link" class="p-inputtext-sm" />
+                </div>
+                <div style="display: inline-block; vertical-align: bottom; margin-left: 1vw;">Client ID<br>
+                    <p-password [(ngModel)]="client_id" [feedback]="false" class="p-inputtext-sm"></p-password>
+                </div>
+                <div style="display: inline-block; vertical-align: bottom; margin-left: 1vw;">Client Secret<br>
+                    <p-password [(ngModel)]="client_secret" [feedback]="false" class="p-inputtext-sm"></p-password>
+                </div>
+                <div style="display: inline-block; vertical-align: bottom; margin-left: 1vw;">
+                    <p-button [disabled]="!schedule_link || !client_id || !client_secret" label="Get Schedule"
+                        styleClass="p-button-rounded p-button-sm" (onClick)="getScheduleInit()"></p-button>
+                </div>
+            </p-tabPanel>
+            <p-tabPanel header="Upload using JSON files">
+                <div style="display:inline-block; width:45%; vertical-align: top;">
+                    <p-fileUpload mode="basic" chooseLabel="Upload preferences" name="" accept=".json"
+                        [style]="{'display':'inline-block'}" styleClass="p-button-rounded p-button-sm"
+                        (onSelect)="readPreferencesJSON($event)"></p-fileUpload><br>
+                </div>
+                <div style="display:inline-block; width:45%; vertical-align: top;">
+                    <p-fileUpload *ngIf="depot_stop_ids.length>0" mode="basic" chooseLabel="Upload a dataset" name=""
+                        accept=".json" [style]="{'display':'inline-block'}" styleClass="p-button-rounded p-button-sm"
+                        (onSelect)="readJSON($event)"></p-fileUpload>
+                </div>
+            </p-tabPanel>
+        </p-tabView>
     </div>
     <div *ngIf="ready_state">
-        <h4>2. Set max distance and default speed and start stop</h4>
-        <p-inputNumber [(ngModel)]="max_distance" inputId="minmax" inputId="minmax" mode="decimal" suffix=" km"
-            [min]="1" [max]="100" [style]="{'margin-right':'1vw'}">
-        </p-inputNumber>
-        <p-inputNumber [(ngModel)]="default_speed" inputId="minmax" inputId="minmax" mode="decimal" suffix=" kmph"
-            [min]="10" [max]="100" [style]="{'margin-right':'1vw'}">
-        </p-inputNumber>
-        <p-inputNumber [(ngModel)]="pull_closest_count" inputId="minmax" inputId="minmax" mode="decimal"
-            suffix=" closest pulls" [min]="1" [max]="100" [style]="{'margin-right':'1vw'}">
-        </p-inputNumber>
-        <div style="display: inline-block;" [style]="{'margin-right':'1vw'}">
-            <p-checkbox label="Include deadheads" [(ngModel)]="include_deadheads" [binary]="true"
-                inputId="binary"></p-checkbox>
+        <h4>2. Set max distance and default speed</h4>
+        <div style="display: inline-block; vertical-align: bottom;">Max distance<br>
+            <p-inputNumber [(ngModel)]="max_distance" inputId="minmax" inputId="minmax" mode="decimal" suffix=" km"
+                [min]="1" [max]="100" [style]="{width:'5vw'}" [inputStyle]="{'width':'100%'}" class="p-inputtext-sm">
+            </p-inputNumber>
         </div>
-        <!--<p-button label="Find all" icon="pi pi-bolt" styleClass="p-button-rounded p-button-success" (onClick)="runForAll()"></p-button>-->
-        <p-button label="Find all" icon="pi pi-bolt" styleClass="p-button-rounded p-button-success"
-            (onClick)="findWays()"></p-button>
+        <div style="display: inline-block; vertical-align: bottom; margin-left: 1vw;">Default speed<br>
+            <p-inputNumber [(ngModel)]="default_speed" inputId="minmax" inputId="minmax" mode="decimal" suffix=" kmph"
+                [min]="10" [max]="100" [style]="{width:'5vw'}" [inputStyle]="{'width':'100%'}" class="p-inputtext-sm">
+            </p-inputNumber>
+        </div>
+        <div style="display: inline-block; vertical-align: bottom; margin-left: 1vw;">Max speed<br>
+            <p-inputNumber [(ngModel)]="max_speed" inputId="minmax" inputId="minmax" mode="decimal" suffix=" kmph"
+                [min]="10" [max]="100" [style]="{width:'5vw'}" [inputStyle]="{'width':'100%'}" class="p-inputtext-sm">
+            </p-inputNumber>
+        </div>
+        <div style="display: inline-block; vertical-align: bottom; margin-left: 1vw;"><br>
+            <p-inputNumber [(ngModel)]="pull_closest_count" inputId="minmax" inputId="minmax" mode="decimal"
+                suffix=" closest pulls" [min]="1" [max]="100" [style]="{width:'5vw'}" [inputStyle]="{'width':'100%'}"
+                class="p-inputtext-sm">
+            </p-inputNumber>
+        </div>
+        <div style="display: inline-block; vertical-align: middle; margin-left: 1vw;">Include deadheads<br>
+            <p-toggleButton [(ngModel)]="include_deadheads" onLabel="Yes" offLabel="No"
+                styleClass="p-button-rounded p-button-sm"></p-toggleButton>
+            <!--                <p-checkbox label="Include deadheads" [(ngModel)]="include_deadheads" [binary]="true"
+                    inputId="binary"></p-checkbox>
+            <p-button label="Find all" icon="pi pi-bolt" styleClass="p-button-rounded p-button-success" (onClick)="runForAll()"></p-button>-->
+        </div>
+        <div style="display: inline-block; vertical-align: bottom; margin-left: 1vw;"><br>
+            <p-button label="Find all" icon="pi pi-bolt" styleClass="p-button-rounded p-button-success p-button-sm"
+                (onClick)="findWays()"></p-button>
+        </div>
         <div style="height:2px; margin-top:1vh">
             <p-progressBar [value]="100*calc_done/total_to_calc" [showValue]="false"
                 [style]="{ height: '2px' }"></p-progressBar>
         </div>
-        <p-table *ngIf="terminal_stops.length>0" [value]="desired_routes" [scrollable]="true" scrollHeight="50vh">
+        <p-table *ngIf="terminal_stops.length>0" [value]="desired_routes" [scrollable]="true" scrollHeight="40vh">
             <ng-template pTemplate="header">
                 <tr>
                     <th></th>
@@ -52,21 +86,18 @@
                 <tr
                     *ngIf="desired_route.distance <= max_distance && (desired_route.is_deadhead === false || (desired_route.is_deadhead && include_deadheads)) && (desired_route.is_deadhead === true || (desired_route.pull_closest_index <= pull_closest_count))">
                     <td>
-                        <p-button *ngIf="desired_route"
-                            [icon]="(desired_route.on_map === undefined)?'pi pi-eye':'pi pi-eye-slash'"
+                        <p-button *ngIf="desired_route" icon="pi pi-info"
                             styleClass="p-button-rounded p-button-outlined"
                             (onClick)="toggleAerialOnMap(desired_route)"></p-button>
                     </td>
-                    <td>{{ desired_route.start_stop.id }}<br>{{ desired_route.start_node }}<br>{{
-                        desired_route.start_stop.short_description }}</td>
-                    <td>{{ desired_route.end_stop.id }}<br>{{ desired_route.end_node }}<br>{{
-                        desired_route.end_stop.short_description }}</td>
+                    <td>{{ desired_route.start_stop.id }}<br>{{desired_route.start_stop.name }}</td>
+                    <td>{{ desired_route.end_stop.id }}<br>{{desired_route.end_stop.name }}</td>
                     <td>{{ desired_route.distance }}</td>
                     <td>{{ desired_route.time }}</td>
                     <td>
-                        <p-button icon="pi pi-bolt" styleClass="p-button-rounded p-button-secondary p-button-outlined"
+                        <!--<p-button icon="pi pi-bolt" styleClass="p-button-rounded p-button-secondary p-button-outlined"
                             (onClick)="log_calcs = true; findWayBetween(desired_route, desired_route.start_node,desired_route.end_node)"></p-button>
-                        <!--<p-button icon="pi pi-add"
+                        <p-button icon="pi pi-add"
                             styleClass="p-button-rounded p-button-secondary p-button-outlined"
                             (onClick)="routeA(desired_route, desired_route.start_node,desired_route.end_node, desired_route.distance)"></p-button>-->
                         <p-button *ngIf="desired_route.nodes && desired_route.nodes.length>0"

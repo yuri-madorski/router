@@ -5,6 +5,7 @@ import * as turf from '@turf/turf';
 import * as JSZip from 'jszip';
 import JSZipUtils from 'jszip-utils';
 import { read, utils, writeFile, writeFileXLSX } from 'xlsx';
+import { CookieService } from 'ngx-cookie-service';
 
 var createGraph = require('ngraph.graph');
 var createPath = require('ngraph.path');
@@ -59,7 +60,8 @@ interface DHRow {
 })
 export class MapComponent implements OnInit {
   constructor(
-    private http: HttpClient
+    private http: HttpClient,
+    private cookeiService: CookieService,
   ) { }
   public is_loading = 0;
   public lat = 52;
@@ -76,6 +78,182 @@ export class MapComponent implements OnInit {
       L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; Turf', }).addTo(this.map);
     })();
   }
+  at: string;
+  //schedule_link: string = 'https://arriva-slovenia.optibus.co/project/slvjkfd/schedules/0ULC5k8sW/gantt?type=duties';
+  //client_id: string = '16p4inl9jq3tmi1r0pd1b00lnl';
+  //client_secret: string = '1t7rb4jqmhc9fj1vargje1aigqapq7vms5tui88gjrmvfn85k61g';
+  schedule_link: string = '';
+  client_id: string = '';
+  client_secret: string = '';
+  domain: string = '';
+  schedule_id: string = '';
+  getScheduleInit() {
+    this.depot_stop_ids = [];
+    this.depots = [];
+    this.terminal_stops = [];
+    this.desired_routes = [];
+  let link = this.schedule_link.split('/');
+    this.domain = link[2];
+    this.schedule_id = link[6];
+    console.log(this.domain, this.schedule_id);
+    if (this.cookeiService.check('at_' + this.domain)) {
+      this.at = this.cookeiService.get('at_' + this.domain);
+      this.getSchedule();
+    } else {
+      this.getAuthToken();
+    }
+  }
+  getAuthToken() {
+    this.is_loading += 1;
+    let params = {
+      t: 'auth',
+      d: this.domain,
+      s: btoa(this.client_id + ':' + this.client_secret),
+    }
+    if (this.domain && this.schedule_id && this.domain.indexOf('.optibus.co') !== -1) {
+      console.time('getAuthToken');
+      this.http.post('https://2hlgt5lm3klq6bvqsao5p47yie0rfrpu.lambda-url.eu-west-2.on.aws/', params).subscribe((data: any) => {
+        console.log('auth', data);
+        this.at = data.access_token;
+        this.cookeiService.set('at_' + this.domain, this.at, 1 / 24);
+        this.is_loading -= 1;
+        console.timeEnd('getAuthToken');
+        this.getSchedule();
+      });
+    } else {
+      alert('Check the input');
+      this.is_loading -= 1;
+    }
+  }
+  getSchedule() {
+    this.is_loading += 1;
+    console.time('getSchedule');
+    let params1 = {
+      t: 'data',
+      at: this.at,
+      d: this.domain,
+      path: '/api/v2/schedule/' + this.schedule_id + '?needPreferences=true&needExtraProps=true'
+    }
+    this.http.post('https://2hlgt5lm3klq6bvqsao5p47yie0rfrpu.lambda-url.eu-west-2.on.aws/', params1).subscribe((data: any) => {
+      console.log('data', data);
+
+      this.depot_stop_ids = data.preferences.find(el => el.depots !== undefined).depots.items.map(d => d.id);
+      this.depots = data.stops.filter(el => this.depot_stop_ids.indexOf(el.id) !== -1);
+      console.log('depots', this.depot_stop_ids, this.depots);
+
+      //console.log('trips', data.events.trips);
+      for (let trip of data.events.trips) {
+        let stop = data.stops.find(st => st.id == trip.stops[0].id);
+        if (stop !== undefined && this.terminal_stops.indexOf(stop) == -1)
+          this.terminal_stops.push(stop);
+        stop = data.stops.find(st => st.id == trip.stops[trip.stops.length - 1].id);
+        if (stop !== undefined && this.terminal_stops.indexOf(stop) == -1)
+          this.terminal_stops.push(stop);
+      }
+      console.log('terminal_stops', this.terminal_stops);
+      this.processData();
+      this.is_loading -= 1;
+      console.timeEnd('getSchedule');
+    });
+  }
+  processData() {
+    this.is_loading += 1;
+    console.time('processData');
+    for (let ts of this.depots) {
+      this.depots_stops_on_map.push(L.circle([ts.lat, ts.long], { color: 'red' }).bindTooltip(ts.id).addTo(this.map));
+    }
+    console.log('depots_stops_on_map', this.depots_stops_on_map);
+    let dr_index = [];
+    for (let ts of this.terminal_stops) {
+      this.terminal_stops_on_map.push(L.circle([ts.lat, ts.long]).bindTooltip(ts.id).addTo(this.map));
+      for (let depot of this.depots) {
+        if (depot.id == ts.id) continue;
+        this.desired_routes.push({
+          start_stop: depot,
+          end_stop: ts,
+          distance: Math.round(turf.distance([depot.long, depot.lat], [ts.long, ts.lat]) * 1000) / 1000,
+          time: null,
+          is_deadhead: false,
+          pull_closest_index: 0
+        });
+        dr_index.push(depot.id + '-' + ts.id);
+        this.desired_routes.push({
+          start_stop: ts,
+          end_stop: depot,
+          distance: Math.round(turf.distance([depot.long, depot.lat], [ts.long, ts.lat]) * 1000) / 1000,
+          time: null,
+          is_deadhead: false,
+          pull_closest_index: 0
+        });
+        dr_index.push(ts.id + '-' + depot.id);
+      }
+      for (let ts1 of this.terminal_stops) {
+        if (ts1.id == ts.id) continue;
+
+        //if (this.desired_routes.find(el => el.start_stop == ts1 && el.end_stop == ts) === undefined) {
+        //console.log(ts1.id + '-' + ts.id, dr_index.indexOf(ts1.id + '-' + ts.id))
+        if (dr_index.indexOf(ts1.id + '-' + ts.id) === -1) {
+          this.desired_routes.push({
+            start_stop: ts1,
+            end_stop: ts,
+            distance: Math.round(turf.distance([ts1.long, ts1.lat], [ts.long, ts.lat]) * 1000) / 1000,
+            time: null,
+            is_deadhead: true
+          });
+          dr_index.push(ts1.id + '-' + ts.id);
+        }
+        //if (this.desired_routes.find(el => el.start_stop == ts && el.end_stop == ts1) === undefined) {
+        //console.log(ts.id + '-' + ts1.id, dr_index.indexOf(ts.id + '-' + ts1.id))
+        if (dr_index.indexOf(ts.id + '-' + ts1.id) === -1) {
+          this.desired_routes.push({
+            start_stop: ts,
+            end_stop: ts1,
+            distance: Math.round(turf.distance([ts1.long, ts1.lat], [ts.long, ts.lat]) * 1000) / 1000,
+            time: null,
+            is_deadhead: true
+          });
+          dr_index.push(ts.id + '-' + ts1.id);
+        }
+      }
+    }
+    console.log('desired_routes', this.desired_routes.length);
+    for (let ts of this.terminal_stops) {
+      let pull_outs = this.desired_routes.filter(el => el.end_stop == ts && el.is_deadhead == false);
+      pull_outs.sort((a, b) => { return (a.distance > b.distance) ? 1 : -1; });
+      let index = 1;
+      for (let pull of pull_outs) {
+        pull.pull_closest_index = index;
+        index += 1;
+      }
+    }
+    for (let ts of this.terminal_stops) {
+      let pull_ins = this.desired_routes.filter(el => el.start_stop == ts && el.is_deadhead == false);
+      pull_ins.sort((a, b) => { return (a.distance > b.distance) ? 1 : -1; });
+      let index = 1;
+      for (let pull of pull_ins) {
+        pull.pull_closest_index = index;
+        index += 1;
+      }
+    }
+    this.desired_routes.sort((a, b) => { return (a.distance > b.distance) ? 1 : -1; });
+    console.log('desired_routes', this.desired_routes.map(el => [el.start_stop.id, el.end_stop.id]));
+    let features = turf.points(this.terminal_stops.map(el => [parseFloat(el.long), parseFloat(el.lat)]), this.depots.map(el => [parseFloat(el.long), parseFloat(el.lat)]));
+    let center = turf.center(features);
+    console.log('center', center);
+    let bbox = turf.bbox(features);
+    console.log('bbox', bbox);
+    let radius = turf.distance([bbox[0], bbox[1]], center);
+    console.log('radius', radius);
+    bbox = turf.bbox(turf.circle(center, radius));
+    console.log('bbox', bbox);
+    //this.map.setView([center.geometry.coordinates[1],center.geometry.coordinates[0]],13);
+    this.map.fitBounds([[bbox[1], bbox[0]], [bbox[3], bbox[2]]]);
+    this.bbox = bbox[1] + ',' + bbox[0] + ',' + bbox[3] + ',' + bbox[2];
+    L.geoJSON(turf.bboxPolygon(bbox), { style: { fill: false } }).addTo(this.map);
+    this.getOSMData();
+    this.is_loading -= 1;
+    console.timeEnd('processData');
+}
   file: any;
   file_loading = false;
   dataJSON: any;
@@ -248,6 +426,7 @@ export class MapComponent implements OnInit {
         this.bbox = bbox[1] + ',' + bbox[0] + ',' + bbox[3] + ',' + bbox[2];
         L.geoJSON(turf.bboxPolygon(bbox), { style: { fill: false } }).addTo(this.map);
         this.getOSMData();
+        this.is_loading -= 1;
       },
       false
     );
@@ -301,6 +480,8 @@ export class MapComponent implements OnInit {
   graph = createGraph();
   graph_links = {};
   getOSMData() {
+    this.is_loading += 1;
+    console.time('getOSMData');
     this.http.get('https://overpass-api.de/api/interpreter?data=[out:json][timeout:300];(' +
       'way["highway"="motorway"](' + this.bbox + ');' +
       'way["highway"="motorway_link"](' + this.bbox + ');' +
@@ -378,6 +559,7 @@ export class MapComponent implements OnInit {
               let n1 = this.nodes_index[pair[1]];
               let distance = turf.distance([n0.lon, n0.lat], [n1.lon, n1.lat]);
               let n_speed = (el.tags['maxspeed']) ? parseInt(el.tags['maxspeed']) : this.default_speed;
+              n_speed = (n_speed > this.max_speed) ? this.max_speed : n_speed;
               let time = (distance / n_speed) * 60;
               this.graph.addLink(pair[0] * 1, pair[1] * 1, { distance: distance, time: time });
               this.graph_links[(pair[0] * 1) + '_' + (pair[1] * 1)] = { distance: distance, time: time };
@@ -399,6 +581,7 @@ export class MapComponent implements OnInit {
         console.log('ready');
         this.ready_state = true;
         this.is_loading -= 1;
+        console.timeEnd('getOSMData');
       });
   }
   showWaysFromPoint(node_id) {
@@ -479,6 +662,7 @@ export class MapComponent implements OnInit {
     route: number[];
   }[] = [];
   default_speed = 40;
+  max_speed = 80;
   min_time_to_nodes: number[] = [];
   min_dist_to_nodes: number[] = [];
   max_distance: number = 15;
