@@ -92,7 +92,7 @@ export class MapComponent implements OnInit {
     this.depots = [];
     this.terminal_stops = [];
     this.desired_routes = [];
-  let link = this.schedule_link.split('/');
+    let link = this.schedule_link.split('/');
     this.domain = link[2];
     this.schedule_id = link[6];
     console.log(this.domain, this.schedule_id);
@@ -136,7 +136,6 @@ export class MapComponent implements OnInit {
     }
     this.http.post('https://2hlgt5lm3klq6bvqsao5p47yie0rfrpu.lambda-url.eu-west-2.on.aws/', params1).subscribe((data: any) => {
       console.log('data', data);
-
       this.depot_stop_ids = data.preferences.find(el => el.depots !== undefined).depots.items.map(d => d.id);
       this.depots = data.stops.filter(el => this.depot_stop_ids.indexOf(el.id) !== -1);
       console.log('depots', this.depot_stop_ids, this.depots);
@@ -163,21 +162,25 @@ export class MapComponent implements OnInit {
       this.depots_stops_on_map.push(L.circle([ts.lat, ts.long], { color: 'red' }).bindTooltip(ts.id).addTo(this.map));
     }
     console.log('depots_stops_on_map', this.depots_stops_on_map);
-    let dr_index = [];
+    let dr_index = new Set();
     for (let ts of this.terminal_stops) {
+      //console.log(ts);
       this.terminal_stops_on_map.push(L.circle([ts.lat, ts.long]).bindTooltip(ts.id).addTo(this.map));
       for (let depot of this.depots) {
-        if (depot.id == ts.id) continue;
-        this.desired_routes.push({
-          start_stop: depot,
-          end_stop: ts,
-          distance: Math.round(turf.distance([depot.long, depot.lat], [ts.long, ts.lat]) * 1000) / 1000,
-          time: null,
-          is_deadhead: false,
-          pull_closest_index: 0
-        });
-        dr_index.push(depot.id + '-' + ts.id);
-        this.desired_routes.push({
+        //if (depot.id == ts.id) continue;
+        if (!dr_index.has(depot.id + '-' + ts.id)) {
+          this.desired_routes.push({
+            start_stop: depot,
+            end_stop: ts,
+            distance: Math.round(turf.distance([depot.long, depot.lat], [ts.long, ts.lat]) * 1000) / 1000,
+            time: null,
+            is_deadhead: false,
+            pull_closest_index: 0
+          });
+          dr_index.add(depot.id + '-' + ts.id);
+        }
+        if (!dr_index.has(ts.id + '-' + depot.id)) {
+          this.desired_routes.push({
           start_stop: ts,
           end_stop: depot,
           distance: Math.round(turf.distance([depot.long, depot.lat], [ts.long, ts.lat]) * 1000) / 1000,
@@ -185,14 +188,15 @@ export class MapComponent implements OnInit {
           is_deadhead: false,
           pull_closest_index: 0
         });
-        dr_index.push(ts.id + '-' + depot.id);
+        dr_index.add(ts.id + '-' + depot.id);
+      }
       }
       for (let ts1 of this.terminal_stops) {
         if (ts1.id == ts.id) continue;
 
         //if (this.desired_routes.find(el => el.start_stop == ts1 && el.end_stop == ts) === undefined) {
         //console.log(ts1.id + '-' + ts.id, dr_index.indexOf(ts1.id + '-' + ts.id))
-        if (dr_index.indexOf(ts1.id + '-' + ts.id) === -1) {
+        if (!dr_index.has(ts1.id + '-' + ts.id)) {
           this.desired_routes.push({
             start_stop: ts1,
             end_stop: ts,
@@ -200,11 +204,11 @@ export class MapComponent implements OnInit {
             time: null,
             is_deadhead: true
           });
-          dr_index.push(ts1.id + '-' + ts.id);
+          dr_index.add(ts1.id + '-' + ts.id);
         }
         //if (this.desired_routes.find(el => el.start_stop == ts && el.end_stop == ts1) === undefined) {
         //console.log(ts.id + '-' + ts1.id, dr_index.indexOf(ts.id + '-' + ts1.id))
-        if (dr_index.indexOf(ts.id + '-' + ts1.id) === -1) {
+        if (!dr_index.has(ts.id + '-' + ts1.id)) {
           this.desired_routes.push({
             start_stop: ts,
             end_stop: ts1,
@@ -212,7 +216,7 @@ export class MapComponent implements OnInit {
             time: null,
             is_deadhead: true
           });
-          dr_index.push(ts.id + '-' + ts1.id);
+          dr_index.add(ts.id + '-' + ts1.id);
         }
       }
     }
@@ -253,7 +257,7 @@ export class MapComponent implements OnInit {
     this.getOSMData();
     this.is_loading -= 1;
     console.timeEnd('processData');
-}
+  }
   file: any;
   file_loading = false;
   dataJSON: any;
@@ -325,6 +329,10 @@ export class MapComponent implements OnInit {
         this.dataJSON.stops.sort((a, b) => (a.short_description < b.short_description) ? -1 : 1);
         this.depots = this.dataJSON.stops.filter(el => this.depot_stop_ids.indexOf(el.id) !== -1);
         console.log('depots', this.depots);
+        for (let stop of this.dataJSON.stops) {
+          stop['name'] = stop.short_description;
+        }
+        console.log('this.dataJSON.stops', this.dataJSON.stops);
         for (let route of this.dataJSON.routes) {
           let stop = this.dataJSON.stops.find(el => el.id == route.trace_points[0].point);
           if (stop !== undefined && this.terminal_stops.indexOf(stop) == -1)
@@ -334,6 +342,9 @@ export class MapComponent implements OnInit {
             this.terminal_stops.push(stop);
         }
         console.log('terminal_stops', this.terminal_stops);
+        this.processData();
+        this.is_loading -= 1;
+        /*
         for (let ts of this.depots) {
           this.depots_stops_on_map.push(L.circle([ts.lat, ts.long], { color: 'red' }).bindTooltip(ts.id).addTo(this.map));
         }
@@ -427,6 +438,7 @@ export class MapComponent implements OnInit {
         L.geoJSON(turf.bboxPolygon(bbox), { style: { fill: false } }).addTo(this.map);
         this.getOSMData();
         this.is_loading -= 1;
+        */
       },
       false
     );
@@ -511,24 +523,27 @@ export class MapComponent implements OnInit {
         }
         console.log('nodes created');
         console.log(this.graph);
+        let tps = {};
         for (let node_id in this.nodes_index) {
           let node = this.nodes_index[node_id];
           for (let ts of this.terminal_stops) {
             if (ts['node_distance'] == undefined) ts['node_distance'] = 500;
-            let dist = turf.distance([ts.long, ts.lat], [node.lon, node.lat], { units: 'meters' });
-            //let dist = Math.sqrt(Math.pow(ts.long * 100 - node.lon * 100, 2) + Math.pow(ts.lat * 100 - node.lat * 100, 2));
+            //let dist = turf.distance([ts.long, ts.lat], [node.lon, node.lat], { units: 'meters' });
+            let dist = Math.sqrt(Math.pow(ts.long * 100 - node.lon * 100, 2) + Math.pow(ts.lat * 100 - node.lat * 100, 2));
             if (dist < ts['node_distance']) {
               ts['node_distance'] = dist;
               ts['node'] = node.id;
+              tps[ts.id] = node.id;
             }
           }
           for (let ts of this.depots) {
             if (ts['node_distance'] == undefined) ts['node_distance'] = 500;
-            let dist = turf.distance([ts.long, ts.lat], [node.lon, node.lat], { units: 'meters' });
-            //let dist = Math.sqrt(Math.pow(ts.long * 100 - node.lon * 100, 2) + Math.pow(ts.lat * 100 - node.lat * 100, 2));
+            //let dist = turf.distance([ts.long, ts.lat], [node.lon, node.lat], { units: 'meters' });
+            let dist = Math.sqrt(Math.pow(ts.long * 100 - node.lon * 100, 2) + Math.pow(ts.lat * 100 - node.lat * 100, 2));
             if (dist < ts['node_distance']) {
               ts['node_distance'] = dist;
               ts['node'] = node.id;
+              tps[ts.id] = node.id;
             }
           }
         }
@@ -549,7 +564,10 @@ export class MapComponent implements OnInit {
         for (let dr of this.desired_routes) {
           dr.start_node = (this.depots.map(el => el.id).indexOf(dr.start_stop.id) !== -1) ? this.depots.find(el => el.id == dr.start_stop.id).node : this.terminal_stops.find(el => el.id == dr.start_stop.id).node;
           dr.end_node = (this.depots.map(el => el.id).indexOf(dr.end_stop.id) !== -1) ? this.depots.find(el => el.id == dr.end_stop.id).node : this.terminal_stops.find(el => el.id == dr.end_stop.id).node;
+          //dr.start_node = tps[dr.start_stop.id];
+          //dr.end_node = tps[dr.start_stop.id];
         }
+        console.log('desired_routes nodes populated');
         //let other_dirs = {};
         for (let el of data.elements) {
           if (el.type == 'way') {
@@ -577,7 +595,7 @@ export class MapComponent implements OnInit {
           }
         }
         //console.log('other_dirs => ', other_dirs);
-        console.log('graph_links => ', this.graph_links);
+        //console.log('graph_links => ', this.graph_links);
         console.log('ready');
         this.ready_state = true;
         this.is_loading -= 1;
