@@ -6,6 +6,7 @@ import * as JSZip from 'jszip';
 import JSZipUtils from 'jszip-utils';
 import { read, utils, writeFile, writeFileXLSX } from 'xlsx';
 import { CookieService } from 'ngx-cookie-service';
+import { worker } from 'cluster';
 
 var createGraph = require('ngraph.graph');
 var createPath = require('ngraph.path');
@@ -77,6 +78,7 @@ export class MapComponent implements OnInit {
       });
       L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { maxZoom: 19, attribution: '&copy; Turf', }).addTo(this.map);
     })();
+    this.sel_road_types = this.road_types;
   }
   at: string;
   //schedule_link: string = 'https://arriva-slovenia.optibus.co/project/slvjkfd/schedules/0ULC5k8sW/gantt?type=duties';
@@ -157,11 +159,11 @@ export class MapComponent implements OnInit {
   }
   processData() {
     this.is_loading += 1;
-    console.time('processData');
     for (let ts of this.depots) {
       this.depots_stops_on_map.push(L.circle([ts.lat, ts.long], { color: 'red' }).bindTooltip(ts.id).addTo(this.map));
     }
     console.log('depots_stops_on_map', this.depots_stops_on_map);
+    console.time('process');
     let dr_index = new Set();
     for (let ts of this.terminal_stops) {
       //console.log(ts);
@@ -181,15 +183,15 @@ export class MapComponent implements OnInit {
         }
         if (!dr_index.has(ts.id + '-' + depot.id)) {
           this.desired_routes.push({
-          start_stop: ts,
-          end_stop: depot,
-          distance: Math.round(turf.distance([depot.long, depot.lat], [ts.long, ts.lat]) * 1000) / 1000,
-          time: null,
-          is_deadhead: false,
-          pull_closest_index: 0
-        });
-        dr_index.add(ts.id + '-' + depot.id);
-      }
+            start_stop: ts,
+            end_stop: depot,
+            distance: Math.round(turf.distance([depot.long, depot.lat], [ts.long, ts.lat]) * 1000) / 1000,
+            time: null,
+            is_deadhead: false,
+            pull_closest_index: 0
+          });
+          dr_index.add(ts.id + '-' + depot.id);
+        }
       }
       for (let ts1 of this.terminal_stops) {
         if (ts1.id == ts.id) continue;
@@ -220,6 +222,7 @@ export class MapComponent implements OnInit {
         }
       }
     }
+    console.timeLog('process');
     console.log('desired_routes', this.desired_routes.length);
     for (let ts of this.terminal_stops) {
       let pull_outs = this.desired_routes.filter(el => el.end_stop == ts && el.is_deadhead == false);
@@ -240,23 +243,24 @@ export class MapComponent implements OnInit {
       }
     }
     this.desired_routes.sort((a, b) => { return (a.distance > b.distance) ? 1 : -1; });
+    console.timeLog('process');
     console.log('desired_routes', this.desired_routes.map(el => [el.start_stop.id, el.end_stop.id]));
     let features = turf.points(this.terminal_stops.map(el => [parseFloat(el.long), parseFloat(el.lat)]), this.depots.map(el => [parseFloat(el.long), parseFloat(el.lat)]));
     let center = turf.center(features);
     console.log('center', center);
     let bbox = turf.bbox(features);
     console.log('bbox', bbox);
-    let radius = turf.distance([bbox[0], bbox[1]], center);
-    console.log('radius', radius);
-    bbox = turf.bbox(turf.circle(center, radius));
+    //let radius = turf.distance([bbox[0], bbox[1]], center);
+    //console.log('radius', radius);
+    //bbox = turf.bbox(turf.circle(center, radius));
+    bbox = [bbox[0] - .15, bbox[1] - .15, bbox[2] + .15, bbox[3] + .15];
     console.log('bbox', bbox);
-    //this.map.setView([center.geometry.coordinates[1],center.geometry.coordinates[0]],13);
     this.map.fitBounds([[bbox[1], bbox[0]], [bbox[3], bbox[2]]]);
     this.bbox = bbox[1] + ',' + bbox[0] + ',' + bbox[3] + ',' + bbox[2];
     L.geoJSON(turf.bboxPolygon(bbox), { style: { fill: false } }).addTo(this.map);
     this.getOSMData();
     this.is_loading -= 1;
-    console.timeEnd('processData');
+    console.timeEnd('process');
   }
   file: any;
   file_loading = false;
@@ -334,12 +338,21 @@ export class MapComponent implements OnInit {
         }
         console.log('this.dataJSON.stops', this.dataJSON.stops);
         for (let route of this.dataJSON.routes) {
-          let stop = this.dataJSON.stops.find(el => el.id == route.trace_points[0].point);
-          if (stop !== undefined && this.terminal_stops.indexOf(stop) == -1)
-            this.terminal_stops.push(stop);
-          stop = this.dataJSON.stops.find(el => el.id == route.trace_points[route.trace_points.length - 1].point);
-          if (stop !== undefined && this.terminal_stops.indexOf(stop) == -1)
-            this.terminal_stops.push(stop);
+          if (route.trace_points) {
+            let stop = this.dataJSON.stops.find(el => el.id == route.trace_points[0].point);
+            if (stop !== undefined && this.terminal_stops.indexOf(stop) == -1)
+              this.terminal_stops.push(stop);
+            stop = this.dataJSON.stops.find(el => el.id == route.trace_points[route.trace_points.length - 1].point);
+            if (stop !== undefined && this.terminal_stops.indexOf(stop) == -1)
+              this.terminal_stops.push(stop);
+          } else {
+            let stop = this.dataJSON.stops.find(el => el.id == route.origin_stop_id);
+            if (stop !== undefined && this.terminal_stops.indexOf(stop) == -1)
+              this.terminal_stops.push(stop);
+            stop = this.dataJSON.stops.find(el => el.id == route.destination_stop_id);
+            if (stop !== undefined && this.terminal_stops.indexOf(stop) == -1)
+              this.terminal_stops.push(stop);
+          }
         }
         console.log('terminal_stops', this.terminal_stops);
         this.processData();
@@ -491,116 +504,137 @@ export class MapComponent implements OnInit {
   graph_name = '';
   graph = createGraph();
   graph_links = {};
+  road_types = [
+    { name: 'motorway', way: 'way["highway"="motorway"]' },
+    { name: 'motorway_link', way: 'way["highway"="motorway_link"]' },
+    { name: 'trunk', way: 'way["highway"="trunk"]' },
+    { name: 'trunk_link', way: 'way["highway"="trunk_link"]' },
+    { name: 'primary', way: 'way["highway"="primary"]' },
+    { name: 'primary_link', way: 'way["highway"="primary_link"]' },
+    { name: 'secondary', way: 'way["highway"="secondary"]' },
+    { name: 'secondary_link', way: 'way["highway"="secondary_link"]' },
+    { name: 'tertiary', way: 'way["highway"="tertiary"]' },
+    { name: 'tertiary_link', way: 'way["highway"="tertiary_link"]' },
+    { name: 'residential[access=private]', way: 'way["highway"="residential"]["access"!="private"]["access"!="permissive"]' },
+    { name: 'living_street', way: 'way["highway"="living_street"]' },
+    { name: 'unclassified', way: 'way["highway"="unclassified"]' },
+    { name: 'service', way: 'way["highway"="service"]' },
+    { name: 'service[bus]', way: 'way["highway"="service"]["bus"]' },
+  ];
+  sel_road_types = [];
   getOSMData() {
     this.is_loading += 1;
     console.time('getOSMData');
-    this.http.get('https://overpass-api.de/api/interpreter?data=[out:json][timeout:300];(' +
-      'way["highway"="motorway"](' + this.bbox + ');' +
-      'way["highway"="motorway_link"](' + this.bbox + ');' +
-      'way["highway"="trunk"](' + this.bbox + ');' +
-      'way["highway"="trunk_link"](' + this.bbox + ');' +
-      'way["highway"="primary"](' + this.bbox + ');' +
-      'way["highway"="primary_link"](' + this.bbox + ');' +
-      'way["highway"="secondary"](' + this.bbox + ');' +
-      'way["highway"="secondary_link"](' + this.bbox + ');' +
-      'way["highway"="tertiary"](' + this.bbox + ');' +
-      'way["highway"="tertiary_link"](' + this.bbox + ');' +
-      'way["highway"="residential"]["access"!="private"]["access"!="permissive"](' + this.bbox + ');' +
-      'way["highway"="living_street"](' + this.bbox + ');' +
-      'way["highway"="unclassified"](' + this.bbox + ');' +
-      'way["highway"="service"](' + this.bbox + ');' +
-      'way["highway"="service"]["bus"](' + this.bbox + ');' +
-      ');out;>;out skel qt;').subscribe((data: any) => {
-        //this.http.get('https://overpass-api.de/api/interpreter?data=[out:json][timeout:300];(way["highway"="motorway"](' + this.bbox + ');way["highway"="motorway_link"](' + this.bbox + ');way["highway"="trunk"](' + this.bbox + ');way["highway"="trunk_link"](' + this.bbox + ');way["highway"="primary"](' + this.bbox + ');way["highway"="secondary"](' + this.bbox + ');way["highway"="secondary_link"](' + this.bbox + ');way["highway"="tertiary"](' + this.bbox + ');way["highway"="residential"]["access"!="private"]["access"!="permissive"](' + this.bbox + ');way["highway"="living_street"](' + this.bbox + ');way["highway"="unclassified"](' + this.bbox + ');way["highway"="service"]["bus"](' + this.bbox + '););out;>;out skel qt;').subscribe((data: any) => {
-        console.log('data received');
-        for (let el of data.elements) {
-          if (el.type == 'node') {
-            let on_map = L.circle([el.lat, el.lon], { radius: 1, opacity: .5, color: '#a77' })
-              .on('click', e => { this.showWaysFromPoint(el.id) });
-            this.nodes_index[el.id * 1] = { id: el.id * 1, lat: el.lat, lon: el.lon, next_nodes: [], on_map: on_map };
-            this.graph.addNode(el.id * 1, { lat: el.lat, lon: el.lon });
-          }
+    let request = '';
+    for (let rt of this.sel_road_types) {
+      request += rt.way + '(' + this.bbox + ');';
+    }
+    this.http.get('https://overpass-api.de/api/interpreter?data=[out:json][timeout:300];(' + request + ');out;>;out skel qt;').subscribe((data: any) => {
+      //this.http.get('https://overpass-api.de/api/interpreter?data=[out:json][timeout:300];(way["highway"="motorway"](' + this.bbox + ');way["highway"="motorway_link"](' + this.bbox + ');way["highway"="trunk"](' + this.bbox + ');way["highway"="trunk_link"](' + this.bbox + ');way["highway"="primary"](' + this.bbox + ');way["highway"="secondary"](' + this.bbox + ');way["highway"="secondary_link"](' + this.bbox + ');way["highway"="tertiary"](' + this.bbox + ');way["highway"="residential"]["access"!="private"]["access"!="permissive"](' + this.bbox + ');way["highway"="living_street"](' + this.bbox + ');way["highway"="unclassified"](' + this.bbox + ');way["highway"="service"]["bus"](' + this.bbox + '););out;>;out skel qt;').subscribe((data: any) => {
+      //console.log('data received', data);
+      if (typeof Worker !== undefined) {
+        const dataload = new Worker(new URL('./dataload.worker', import.meta.url));
+        dataload.onmessage = ({ data }) => {
+          console.log('data loaded', data);
         }
-        console.log('nodes created');
-        console.log(this.graph);
-        let tps = {};
-        for (let node_id in this.nodes_index) {
-          let node = this.nodes_index[node_id];
-          for (let ts of this.terminal_stops) {
-            if (ts['node_distance'] == undefined) ts['node_distance'] = 500;
-            //let dist = turf.distance([ts.long, ts.lat], [node.lon, node.lat], { units: 'meters' });
-            let dist = Math.sqrt(Math.pow(ts.long * 100 - node.lon * 100, 2) + Math.pow(ts.lat * 100 - node.lat * 100, 2));
-            if (dist < ts['node_distance']) {
-              ts['node_distance'] = dist;
-              ts['node'] = node.id;
-              tps[ts.id] = node.id;
-            }
-          }
-          for (let ts of this.depots) {
-            if (ts['node_distance'] == undefined) ts['node_distance'] = 500;
-            //let dist = turf.distance([ts.long, ts.lat], [node.lon, node.lat], { units: 'meters' });
-            let dist = Math.sqrt(Math.pow(ts.long * 100 - node.lon * 100, 2) + Math.pow(ts.lat * 100 - node.lat * 100, 2));
-            if (dist < ts['node_distance']) {
-              ts['node_distance'] = dist;
-              ts['node'] = node.id;
-              tps[ts.id] = node.id;
-            }
-          }
+        dataload.postMessage('hi', data);
+      } else {
+        console.error('Worker not supported in this environment');
+      }
+      for (let el of data.elements) {
+        if (el.type == 'node') {
+          let on_map = L.circle([el.lat, el.lon], { radius: 1, opacity: .5, color: '#a77' })
+            .on('click', e => { this.showWaysFromPoint(el.id) });
+          this.nodes_index[el.id * 1] = { id: el.id * 1, lat: el.lat, lon: el.lon, next_nodes: [], on_map: on_map };
+          this.graph.addNode(el.id * 1, { lat: el.lat, lon: el.lon });
         }
+      }
+      console.log('nodes created');
+      console.timeLog('getOSMData');
+      console.log(this.graph);
+      let tps = {};
+      for (let node_id in this.nodes_index) {
+        let node = this.nodes_index[node_id];
         for (let ts of this.terminal_stops) {
-          this.terminal_stops_nodes.push(ts['node']);
-          if (this.nodes_index[ts['node']]) {
-            L.circle([this.nodes_index[ts['node']].lat, this.nodes_index[ts['node']].lon], { radius: 1, opacity: .5, color: 'green' }).addTo(this.map);
-            L.polyline([[ts.lat, ts.long], [this.nodes_index[ts['node']].lat, this.nodes_index[ts['node']].lon]]).addTo(this.map);
+          if (ts['node_distance'] == undefined) ts['node_distance'] = 500;
+          //let dist = turf.distance([ts.long, ts.lat], [node.lon, node.lat], { units: 'meters' });
+          let dist = Math.sqrt(Math.pow(ts.long * 100 - node.lon * 100, 2) + Math.pow(ts.lat * 100 - node.lat * 100, 2));
+          if (dist < ts['node_distance']) {
+            ts['node_distance'] = dist;
+            ts['node'] = node.id;
+            tps[ts.id] = node.id;
           }
         }
         for (let ts of this.depots) {
-          if (this.nodes_index[ts['node']]) {
-            L.circle([this.nodes_index[ts['node']].lat, this.nodes_index[ts['node']].lon], { radius: 1, opacity: .5, color: 'red' }).addTo(this.map);
-            L.polyline([[ts.lat, ts.long], [this.nodes_index[ts['node']].lat, this.nodes_index[ts['node']].lon]]).addTo(this.map);
+          if (ts['node_distance'] == undefined) ts['node_distance'] = 500;
+          //let dist = turf.distance([ts.long, ts.lat], [node.lon, node.lat], { units: 'meters' });
+          let dist = Math.sqrt(Math.pow(ts.long * 100 - node.lon * 100, 2) + Math.pow(ts.lat * 100 - node.lat * 100, 2));
+          if (dist < ts['node_distance']) {
+            ts['node_distance'] = dist;
+            ts['node'] = node.id;
+            tps[ts.id] = node.id;
           }
         }
-        console.log('terminal_stops_nodes', this.terminal_stops_nodes);
-        for (let dr of this.desired_routes) {
-          dr.start_node = (this.depots.map(el => el.id).indexOf(dr.start_stop.id) !== -1) ? this.depots.find(el => el.id == dr.start_stop.id).node : this.terminal_stops.find(el => el.id == dr.start_stop.id).node;
-          dr.end_node = (this.depots.map(el => el.id).indexOf(dr.end_stop.id) !== -1) ? this.depots.find(el => el.id == dr.end_stop.id).node : this.terminal_stops.find(el => el.id == dr.end_stop.id).node;
-          //dr.start_node = tps[dr.start_stop.id];
-          //dr.end_node = tps[dr.start_stop.id];
+      }
+      console.timeLog('getOSMData');
+      for (let ts of this.terminal_stops) {
+        this.terminal_stops_nodes.push(ts['node']);
+        if (this.nodes_index[ts['node']]) {
+          L.circle([this.nodes_index[ts['node']].lat, this.nodes_index[ts['node']].lon], { radius: 1, opacity: .5, color: 'green' }).addTo(this.map);
+          L.polyline([[ts.lat, ts.long], [this.nodes_index[ts['node']].lat, this.nodes_index[ts['node']].lon]]).addTo(this.map);
         }
-        console.log('desired_routes nodes populated');
-        //let other_dirs = {};
-        for (let el of data.elements) {
-          if (el.type == 'way') {
-            //this.ways.push({ id: el.id, nodes: el.nodes, tags: el.tags });
-            for (let pair of this.pairwise(el.nodes)) {
-              let n0 = this.nodes_index[pair[0]];
-              let n1 = this.nodes_index[pair[1]];
-              let distance = turf.distance([n0.lon, n0.lat], [n1.lon, n1.lat]);
-              let n_speed = (el.tags['maxspeed']) ? parseInt(el.tags['maxspeed']) : this.default_speed;
-              n_speed = (n_speed > this.max_speed) ? this.max_speed : n_speed;
-              let time = (distance / n_speed) * 60;
-              this.graph.addLink(pair[0] * 1, pair[1] * 1, { distance: distance, time: time });
-              this.graph_links[(pair[0] * 1) + '_' + (pair[1] * 1)] = { distance: distance, time: time };
-              //this.nodes_index[pair[0]].next_nodes.push({ id: pair[1], distance: distance, tags: el.tags, path: [] });
-              let other_dir = true;
-              if (el.tags['junction'] && el.tags['junction'] == 'roundabout') other_dir = false;
-              if (el.tags['oneway'] == 'yes' && el.tags['oneway:psv'] !== 'no' && el.tags['oneway:bus'] !== 'no') other_dir = false;
-              if (other_dir) {
-                this.graph.addLink(pair[1] * 1, pair[0] * 1, { distance: distance, time: time });
-                //  this.nodes_index[pair[1]].next_nodes.push({ id: pair[0], distance: distance, tags: el.tags, path: [] });
-              }
-              this.graph_links[(pair[1] * 1) + '_' + (pair[0] * 1)] = { distance: distance, time: time };
-              //other_dirs[(pair[1] * 1) + '_' + (pair[0] * 1)] = {od:other_dir,tags:el.tags};
+      }
+      console.timeLog('getOSMData');
+      for (let ts of this.depots) {
+        if (this.nodes_index[ts['node']]) {
+          L.circle([this.nodes_index[ts['node']].lat, this.nodes_index[ts['node']].lon], { radius: 1, opacity: .5, color: 'red' }).addTo(this.map);
+          L.polyline([[ts.lat, ts.long], [this.nodes_index[ts['node']].lat, this.nodes_index[ts['node']].lon]]).addTo(this.map);
+        }
+      }
+      console.timeLog('getOSMData');
+      console.log('terminal_stops_nodes', this.terminal_stops_nodes);
+      for (let dr of this.desired_routes) {
+        dr.start_node = (this.depots.map(el => el.id).indexOf(dr.start_stop.id) !== -1) ? this.depots.find(el => el.id == dr.start_stop.id).node : this.terminal_stops.find(el => el.id == dr.start_stop.id).node;
+        dr.end_node = (this.depots.map(el => el.id).indexOf(dr.end_stop.id) !== -1) ? this.depots.find(el => el.id == dr.end_stop.id).node : this.terminal_stops.find(el => el.id == dr.end_stop.id).node;
+        //dr.start_node = tps[dr.start_stop.id];
+        //dr.end_node = tps[dr.start_stop.id];
+      }
+      console.timeLog('getOSMData');
+      console.log('desired_routes nodes populated');
+      //let other_dirs = {};
+      for (let el of data.elements) {
+        if (el.type == 'way') {
+          //this.ways.push({ id: el.id, nodes: el.nodes, tags: el.tags });
+          for (let pair of this.pairwise(el.nodes)) {
+            let n0 = this.nodes_index[pair[0]];
+            let n1 = this.nodes_index[pair[1]];
+            let distance = turf.distance([n0.lon, n0.lat], [n1.lon, n1.lat]);
+            let n_speed = (el.tags['maxspeed']) ? parseInt(el.tags['maxspeed']) : this.default_speed;
+            n_speed = (n_speed > this.max_speed) ? this.max_speed : n_speed;
+            let time = (distance / n_speed) * 60;
+            this.graph.addLink(pair[0] * 1, pair[1] * 1, { distance: distance, time: time });
+            this.graph_links[(pair[0] * 1) + '_' + (pair[1] * 1)] = { distance: distance, time: time };
+            //this.nodes_index[pair[0]].next_nodes.push({ id: pair[1], distance: distance, tags: el.tags, path: [] });
+            let other_dir = true;
+            if (el.tags['junction'] && el.tags['junction'] == 'roundabout') other_dir = false;
+            if (el.tags['oneway'] == 'yes' && el.tags['oneway:psv'] !== 'no' && el.tags['oneway:bus'] !== 'no') other_dir = false;
+            if (other_dir) {
+              this.graph.addLink(pair[1] * 1, pair[0] * 1, { distance: distance, time: time });
+              //  this.nodes_index[pair[1]].next_nodes.push({ id: pair[0], distance: distance, tags: el.tags, path: [] });
             }
+            this.graph_links[(pair[1] * 1) + '_' + (pair[0] * 1)] = { distance: distance, time: time };
+            //other_dirs[(pair[1] * 1) + '_' + (pair[0] * 1)] = {od:other_dir,tags:el.tags};
           }
         }
-        //console.log('other_dirs => ', other_dirs);
-        //console.log('graph_links => ', this.graph_links);
-        console.log('ready');
-        this.ready_state = true;
-        this.is_loading -= 1;
-        console.timeEnd('getOSMData');
-      });
+      }
+      //console.log('other_dirs => ', other_dirs);
+      //console.log('graph_links => ', this.graph_links);
+      console.log('ready');
+      data = undefined;
+      this.ready_state = true;
+      this.is_loading -= 1;
+      console.timeEnd('getOSMData');
+    }, (err) => { alert(err) });
   }
   showWaysFromPoint(node_id) {
     let n0 = this.nodes_index[node_id];
@@ -621,6 +655,9 @@ export class MapComponent implements OnInit {
       }
     }
     return closest_node;
+  }
+  getTotalToCalc() {
+    return this.desired_routes.filter(dr => dr.distance < this.max_distance && (dr.is_deadhead === false || (dr.is_deadhead && this.include_deadheads)) && (dr.is_deadhead === true || (dr.pull_closest_index <= this.pull_closest_count))).length;
   }
   async findWays() {
     let start_time = new Date().getTime() / 1000;

@@ -15,6 +15,7 @@ import { FieldsetModule } from 'primeng/fieldset';
 import { FileUploadModule } from 'primeng/fileupload';
 import { InputNumberModule } from 'primeng/inputnumber';
 import { InputTextModule } from 'primeng/inputtext';
+import { MultiSelectModule } from 'primeng/multiselect';
 import { PasswordModule } from 'primeng/password';
 import { ProgressBarModule } from 'primeng/progressbar';
 import { ScrollPanelModule } from 'primeng/scrollpanel';
@@ -41,6 +42,7 @@ import { TabViewModule } from 'primeng/tabview';
     FileUploadModule,
     InputNumberModule,
     InputTextModule,
+    MultiSelectModule,
     PasswordModule,
     ProgressBarModule,
     ScrollPanelModule,

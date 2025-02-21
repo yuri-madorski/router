@@ -5,28 +5,36 @@
     <div>
         <p-tabView>
             <p-tabPanel header="Upload via Optibus API">
-                <div style="display: inline-block; vertical-align: bottom;">Link to the schedule<br>
+                <div style="display: inline-block; vertical-align: top;">Road types for graph<br>
+                    <p-multiSelect [options]="road_types" [(ngModel)]="sel_road_types" optionLabel="name"
+                        [maxSelectedLabels]="1" selectedItemsLabel="{0} selected" />
+                </div>
+                <div style="display: inline-block; vertical-align: top; margin-left: 1vw;">Link to the schedule<br>
                     <input type="text" pInputText [(ngModel)]="schedule_link" class="p-inputtext-sm" />
                 </div>
-                <div style="display: inline-block; vertical-align: bottom; margin-left: 1vw;">Client ID<br>
+                <div style="display: inline-block; vertical-align: top; margin-left: 1vw;">Client ID<br>
                     <p-password [(ngModel)]="client_id" [feedback]="false" class="p-inputtext-sm"></p-password>
                 </div>
-                <div style="display: inline-block; vertical-align: bottom; margin-left: 1vw;">Client Secret<br>
+                <div style="display: inline-block; vertical-align: top; margin-left: 1vw;">Client Secret<br>
                     <p-password [(ngModel)]="client_secret" [feedback]="false" class="p-inputtext-sm"></p-password>
                 </div>
-                <div style="display: inline-block; vertical-align: bottom; margin-left: 1vw;">
+                <div style="display: inline-block; vertical-align: top; margin-left: 1vw;">
                     <p-button [disabled]="!schedule_link || !client_id || !client_secret" label="Get Schedule"
                         styleClass="p-button-rounded p-button-sm" (onClick)="getScheduleInit()"></p-button>
                 </div>
             </p-tabPanel>
             <p-tabPanel header="Upload using JSON files">
-                <div style="display:inline-block; width:45%; vertical-align: top;">
-                    <p-fileUpload mode="basic" chooseLabel="Upload preferences" name="" accept=".json"
+                <div style="display: inline-block; vertical-align: top;">Road types for graph<br>
+                    <p-multiSelect [options]="road_types" [(ngModel)]="sel_road_types" optionLabel="name"
+                        [maxSelectedLabels]="1" selectedItemsLabel="{0} selected" />
+                </div>
+                <div style="display:inline-block; vertical-align: top; margin-left: 1vw;">Upload preferences<br>
+                    <p-fileUpload mode="basic" chooseLabel="Upload JSON" name="" accept=".json"
                         [style]="{'display':'inline-block'}" styleClass="p-button-rounded p-button-sm"
                         (onSelect)="readPreferencesJSON($event)"></p-fileUpload><br>
                 </div>
-                <div style="display:inline-block; width:45%; vertical-align: top;">
-                    <p-fileUpload *ngIf="depot_stop_ids.length>0" mode="basic" chooseLabel="Upload a dataset" name=""
+                <div style="display:inline-block; vertical-align: top; margin-left: 1vw;">Upload a dataset<br>
+                    <p-fileUpload *ngIf="depot_stop_ids.length>0" mode="basic" chooseLabel="Upload JSON" name=""
                         accept=".json" [style]="{'display':'inline-block'}" styleClass="p-button-rounded p-button-sm"
                         (onSelect)="readJSON($event)"></p-fileUpload>
                 </div>
@@ -50,9 +58,8 @@
             </p-inputNumber>
         </div>
         <div style="display: inline-block; vertical-align: bottom; margin-left: 1vw;">Closest pulls<br>
-            <p-inputNumber [(ngModel)]="pull_closest_count" inputId="minmax" inputId="minmax" mode="decimal"
-                [min]="1" [max]="100" [style]="{width:'5vw'}" [inputStyle]="{'width':'100%'}"
-                class="p-inputtext-sm">
+            <p-inputNumber [(ngModel)]="pull_closest_count" inputId="minmax" inputId="minmax" mode="decimal" [min]="1"
+                [max]="100" [style]="{width:'5vw'}" [inputStyle]="{'width':'100%'}" class="p-inputtext-sm">
             </p-inputNumber>
         </div>
         <div style="display: inline-block; vertical-align: middle; margin-left: 1vw;">Include deadheads<br>
@@ -63,8 +70,8 @@
             <p-button label="Find all" icon="pi pi-bolt" styleClass="p-button-rounded p-button-success" (onClick)="runForAll()"></p-button>-->
         </div>
         <div style="display: inline-block; vertical-align: bottom; margin-left: 1vw;"><br>
-            <p-button [label]="'Find all ('+desired_routes.length+')'" icon="pi pi-bolt" styleClass="p-button-rounded p-button-success p-button-sm"
-                (onClick)="findWays()"></p-button>
+            <p-button [label]="'Find all ('+getTotalToCalc()+')'" icon="pi pi-bolt"
+                styleClass="p-button-rounded p-button-success p-button-sm" (onClick)="findWays()"></p-button>
         </div>
         <div style="height:2px; margin-top:1vh">
             <p-progressBar [value]="100*calc_done/total_to_calc" [showValue]="false"
@@ -104,8 +111,8 @@
         </p-table>
         <!--<p-toggleButton [disabled]="true" *ngIf="calc_done>total_to_calc" [(ngModel)]="graph_shown"
             onLabel="Hide graph nodes" offLabel="Show graph nodes" (click)="toggleGraphNodes()"></p-toggleButton>-->
-        <p-toggleButton [(ngModel)]="all_on_map" styleClass="p-button-rounded p-button-info" [onLabel]="'Hide all shapes'"
-            offLabel="Show all shapes" (click)="toggleAllRouteOnMap()"></p-toggleButton>
+        <p-toggleButton [(ngModel)]="all_on_map" styleClass="p-button-rounded p-button-info"
+            [onLabel]="'Hide all shapes'" offLabel="Show all shapes" (click)="toggleAllRouteOnMap()"></p-toggleButton>
         <p-button [disabled]="is_loading>0" styleClass="p-button-rounded p-button-success" label="Get catalogue"
             icon="pi pi-download" (onClick)="produceXLSX()"></p-button>
     </div>
